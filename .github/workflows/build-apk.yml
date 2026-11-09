@@ -2,7 +2,7 @@ name: Build LenovoBuds ALPHA APK
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main, master, 'fix/gm2-pro-discovery-ui' ]
   workflow_dispatch:
 
 permissions:
