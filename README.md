@@ -1,6 +1,6 @@
 # LenovoBuds
 
-**LenovoBuds ALPHA 0.1** is an unofficial Android companion-app research project for Lenovo/thinkplus earbuds, beginning with the GM2 Pro. The LE258 is a secondary research target. It is not an official Lenovo app.
+**LenovoBuds ALPHA 0.1.1** is an unofficial Android companion-app research project for Lenovo/thinkplus earbuds, beginning with the GM2 Pro. The LE258 is a secondary research target. It is not an official Lenovo app.
 
 ![LenovoBuds logo](app/src/main/res/drawable-nodpi/lenovobuds_logo.png)
 
@@ -42,9 +42,11 @@ For real GM2 Pro support, the next step is a short, controlled Bluetooth HCI sno
 ## Build the ALPHA APK
 
 1. Open the repository's Actions tab.
-2. Select the latest Build LenovoBuds APK workflow run.
-3. When the job succeeds, download the LenovoBuds-debug-apk artifact.
-4. Extract and install app-debug.apk.
+2. Select the latest successful Build LenovoBuds ALPHA APK workflow run.
+3. Download the versioned artifact, for example `LenovoBuds-v0.1.1-alpha-build-123.zip`.
+4. Extract and install the APK inside. Its filename includes the app version and build number, not the generic `app-debug.apk` name.
+
+The internal Android Gradle output is still named `app-debug.apk`; the workflow copies it to a versioned filename before uploading it.
 
 A successful push to main also creates a GitHub ALPHA pre-release with the debug APK attached. The APK is an unsigned debug build for testing, not a signed Play Store release. The workflow artifact is also retained for 14 days.
 
