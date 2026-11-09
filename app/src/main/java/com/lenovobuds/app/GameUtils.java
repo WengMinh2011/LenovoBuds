@@ -40,10 +40,14 @@ public final class GameUtils {
             while (events != null && events.hasNextEvent()) {
                 events.getNextEvent(event);
                 int type = event.getEventType();
-                if (type == UsageEvents.Event.MOVE_TO_FOREGROUND || type == UsageEvents.Event.MOVE_TO_BACKGROUND) {
+                boolean foreground = type == UsageEvents.Event.MOVE_TO_FOREGROUND
+                        || (Build.VERSION.SDK_INT >= 29 && type == UsageEvents.Event.ACTIVITY_RESUMED);
+                boolean background = type == UsageEvents.Event.MOVE_TO_BACKGROUND
+                        || (Build.VERSION.SDK_INT >= 29 && type == UsageEvents.Event.ACTIVITY_PAUSED);
+                if (foreground || background) {
                     if (event.getTimeStamp() >= latest) {
                         latest = event.getTimeStamp();
-                        current = type == UsageEvents.Event.MOVE_TO_FOREGROUND ? event.getPackageName() : null;
+                        current = foreground ? event.getPackageName() : null;
                     }
                 }
             }
