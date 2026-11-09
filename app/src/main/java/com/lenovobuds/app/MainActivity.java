@@ -32,6 +32,7 @@ import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
 import android.widget.ImageView;
+import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.Switch;
@@ -294,10 +295,11 @@ public class MainActivity extends Activity {
         profileChips.setOrientation(LinearLayout.HORIZONTAL);
         profileChips.setGravity(Gravity.CENTER_VERTICAL);
         profileChips.setPadding(0, dp(5), 0, dp(4));
-        ScrollView horizontal = new ScrollView(this);
+        HorizontalScrollView horizontal = new HorizontalScrollView(this);
         horizontal.setHorizontalScrollBarEnabled(false);
         horizontal.setVerticalScrollBarEnabled(false);
         horizontal.setFillViewport(false);
+        horizontal.setClipToPadding(false);
         horizontal.setHorizontalFadingEdgeEnabled(false);
         horizontal.addView(profileChips);
         LinearLayout.LayoutParams horizontalLp = params(-1, dp(50));
@@ -661,8 +663,7 @@ public class MainActivity extends Activity {
         String[] labels = new String[list.size()];
         for (int i = 0; i < list.size(); i++) {
             BluetoothDevice d = list.get(i);
-            String state = isAudioConnected(d) ? "CONNECTED · " : "PAIRED · ";
-            labels[i] = state + safeDeviceName(d) + "\n" + d.getAddress();
+            labels[i] = "PAIRED · " + safeDeviceName(d) + "\n" + d.getAddress();
         }
         new AlertDialog.Builder(this).setTitle("Select your earbuds")
                 .setMessage(message)
@@ -674,17 +675,6 @@ public class MainActivity extends Activity {
         return normalized.contains("GM2") || normalized.contains("GM 2")
                 || normalized.contains("THINKPLUS") || normalized.contains("LENOVO")
                 || normalized.contains("LE258");
-    }
-
-    private boolean isAudioConnected(BluetoothDevice target) {
-        if (target == null || bluetoothManager == null) return false;
-        try {
-            for (BluetoothDevice connected : bluetoothManager.getConnectedDevices(BluetoothProfile.A2DP))
-                if (target.equals(connected)) return true;
-            for (BluetoothDevice connected : bluetoothManager.getConnectedDevices(BluetoothProfile.HEADSET))
-                if (target.equals(connected)) return true;
-        } catch (SecurityException ignored) {}
-        return false;
     }
 
     private String safeDeviceName(BluetoothDevice device) {
@@ -705,15 +695,11 @@ public class MainActivity extends Activity {
                 try { gatt.disconnect(); gatt.close(); } catch (Throwable ignored) {}
                 gatt = null;
             }
-            deviceStatus.setText(isAudioConnected(device)
-                    ? "Connected · Android Bluetooth audio"
-                    : "Paired · connect it in Android Bluetooth settings");
+            deviceStatus.setText("Paired · Android manages the Bluetooth audio connection");
             modelStatus.setText(detectModel(name) + " · device identified; control protocol not verified");
             batteryStatus.setText("Earbud battery · not exposed to LenovoBuds yet");
             ancStatus.setText("ANC / Ambient controls remain locked until a GM2 Pro control protocol is verified.");
-            Toast.makeText(this, isAudioConnected(device)
-                    ? "GM2 Pro detected as a connected audio device"
-                    : "GM2 Pro is paired but not connected for audio", Toast.LENGTH_LONG).show();
+            Toast.makeText(this, "GM2 Pro detected. Android manages its audio connection; earbud controls are not verified yet.", Toast.LENGTH_LONG).show();
             return;
         }
         try {
