@@ -46,7 +46,7 @@ For real GM2 Pro support, the next step is a short, controlled Bluetooth HCI sno
 3. When the job succeeds, download the LenovoBuds-debug-apk artifact.
 4. Extract and install app-debug.apk.
 
-The workflow also runs automatically after commits to main. The APK is a debug build for testing, not a signed Play Store release. GitHub retains the artifact for 14 days.
+A successful push to main also creates a GitHub ALPHA pre-release with the debug APK attached. The APK is an unsigned debug build for testing, not a signed Play Store release. The workflow artifact is also retained for 14 days.
 
 ## Build locally
 
