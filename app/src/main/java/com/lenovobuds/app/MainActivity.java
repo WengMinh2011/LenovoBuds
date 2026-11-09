@@ -65,6 +65,7 @@ public class MainActivity extends Activity {
     private final Map<String, BluetoothDevice> devices = new LinkedHashMap<>();
     private SharedPreferences prefs;
     private BluetoothAdapter bluetoothAdapter;
+    private BluetoothManager bluetoothManager;
     private BluetoothLeScanner bleScanner;
     private ScanCallback scanCallback;
     private BluetoothGatt gatt;
@@ -96,8 +97,8 @@ public class MainActivity extends Activity {
         getWindow().setNavigationBarColor(BG);
         getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
         prefs = getSharedPreferences("lenovo_buds", MODE_PRIVATE);
-        BluetoothManager manager = (BluetoothManager) getSystemService(BLUETOOTH_SERVICE);
-        if (manager != null) bluetoothAdapter = manager.getAdapter();
+        bluetoothManager = (BluetoothManager) getSystemService(BLUETOOTH_SERVICE);
+        if (bluetoothManager != null) bluetoothAdapter = bluetoothManager.getAdapter();
         selectedProfile = prefs.getString("active_profile", ProfileCatalog.MUSIC);
         currentGains = loadCurrentGains();
         buildScreen();
@@ -570,11 +571,30 @@ public class MainActivity extends Activity {
             catch (Throwable ignored) { Toast.makeText(this, "Enable Bluetooth in Settings", Toast.LENGTH_SHORT).show(); }
             return;
         }
+
         devices.clear();
         addPairedDevices();
+
+        // GM2 Pro appears as a paired Bluetooth audio endpoint. It must not be
+        // treated as a BLE peripheral or forced through connectGatt().
+        boolean hasLenovoPair = false;
+        for (BluetoothDevice device : devices.values()) {
+            String name = safeDeviceName(device).toUpperCase(Locale.ROOT);
+            if (name.contains("GM2") || name.contains("GM 2")
+                    || name.contains("THINKPLUS") || name.contains("LENOVO")
+                    || name.contains("LE258")) {
+                hasLenovoPair = true;
+                break;
+            }
+        }
+        if (hasLenovoPair || !devices.isEmpty()) {
+            showDevicePicker("Paired Bluetooth devices are listed first. Choose your thinkplus GM2 Pro.");
+            return;
+        }
+
         bleScanner = bluetoothAdapter.getBluetoothLeScanner();
         if (bleScanner == null) {
-            showDevicePicker("BLE scanning is unavailable. You can still try a paired device.");
+            showDevicePicker("No paired device was found and BLE scanning is unavailable. Pair your earbuds in Android Bluetooth settings first.");
             return;
         }
         scanCallback = new ScanCallback() {
@@ -588,22 +608,22 @@ public class MainActivity extends Activity {
             }
             @Override public void onScanFailed(int errorCode) {
                 scanning = false;
-                runOnUiThread(() -> showDevicePicker("BLE scan failed (" + errorCode + "). Paired devices are still listed."));
+                runOnUiThread(() -> showDevicePicker("BLE scan failed (" + errorCode + "). Pair the earbuds in Android Bluetooth settings first."));
             }
         };
         try {
             ScanSettings settings = new ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build();
             bleScanner.startScan(null, settings, scanCallback);
             scanning = true;
-            deviceStatus.setText("Scanning nearby Bluetooth LE devices…");
+            deviceStatus.setText("Looking for BLE control services…");
             handler.postDelayed(() -> {
                 stopScan();
-                showDevicePicker("Select your Lenovo earbuds from nearby or paired devices.");
+                showDevicePicker("No paired Lenovo device was found. Select a device from the list if available.");
             }, 8000L);
         } catch (SecurityException error) {
             Toast.makeText(this, "Bluetooth permission was not granted", Toast.LENGTH_LONG).show();
         } catch (Throwable error) {
-            showDevicePicker("Could not start BLE scan. Check Bluetooth settings.");
+            showDevicePicker("Could not start BLE scan. Pair the earbuds in Android Bluetooth settings first.");
         }
     }
 
@@ -625,21 +645,46 @@ public class MainActivity extends Activity {
     private void showDevicePicker(String message) {
         addPairedDevices();
         if (devices.isEmpty()) {
-            deviceStatus.setText("No BLE or paired device found");
-            new AlertDialog.Builder(this).setTitle("No earbuds found").setMessage(message + "\n\nPair the earbuds in Android Bluetooth Settings, then try again.")
-                    .setPositiveButton("Bluetooth settings", (d, w) -> startActivity(new Intent(Settings.ACTION_BLUETOOTH_SETTINGS)))
+            deviceStatus.setText("No paired devices found");
+            new AlertDialog.Builder(this).setTitle("No paired earbuds found")
+                    .setMessage(message + "\n\nYour phone already needs to pair the earbuds in Android Bluetooth settings before LenovoBuds can identify them.")
+                    .setPositiveButton("Open Bluetooth settings", (d, w) -> startActivity(new Intent(Settings.ACTION_BLUETOOTH_SETTINGS)))
                     .setNegativeButton("Close", null).show();
             return;
         }
         List<BluetoothDevice> list = new ArrayList<>(devices.values());
+        list.sort((left, right) -> {
+            boolean l = isLenovoName(safeDeviceName(left));
+            boolean r = isLenovoName(safeDeviceName(right));
+            return Boolean.compare(r, l);
+        });
         String[] labels = new String[list.size()];
         for (int i = 0; i < list.size(); i++) {
             BluetoothDevice d = list.get(i);
-            labels[i] = safeDeviceName(d) + "\n" + d.getAddress();
+            String state = isAudioConnected(d) ? "CONNECTED · " : "PAIRED · ";
+            labels[i] = state + safeDeviceName(d) + "\n" + d.getAddress();
         }
-        new AlertDialog.Builder(this).setTitle("Found Bluetooth devices")
+        new AlertDialog.Builder(this).setTitle("Select your earbuds")
                 .setMessage(message)
                 .setItems(labels, (dialog, which) -> connectGatt(list.get(which))).show();
+    }
+
+    private boolean isLenovoName(String name) {
+        String normalized = name == null ? "" : name.toUpperCase(Locale.ROOT);
+        return normalized.contains("GM2") || normalized.contains("GM 2")
+                || normalized.contains("THINKPLUS") || normalized.contains("LENOVO")
+                || normalized.contains("LE258");
+    }
+
+    private boolean isAudioConnected(BluetoothDevice target) {
+        if (target == null || bluetoothManager == null) return false;
+        try {
+            for (BluetoothDevice connected : bluetoothManager.getConnectedDevices(BluetoothProfile.A2DP))
+                if (target.equals(connected)) return true;
+            for (BluetoothDevice connected : bluetoothManager.getConnectedDevices(BluetoothProfile.HEADSET))
+                if (target.equals(connected)) return true;
+        } catch (SecurityException ignored) {}
+        return false;
     }
 
     private String safeDeviceName(BluetoothDevice device) {
@@ -651,14 +696,33 @@ public class MainActivity extends Activity {
 
     private void connectGatt(BluetoothDevice device) {
         if (!hasBluetoothPermissions()) { requestBluetoothPermissions(); return; }
+        String name = safeDeviceName(device);
+        if (isLenovoName(name)) {
+            // The GM2 Pro is currently treated as a classic Bluetooth audio
+            // device. A2DP connection is managed by Android; a BLE GATT
+            // connection is not the same thing as the audio connection.
+            if (gatt != null) {
+                try { gatt.disconnect(); gatt.close(); } catch (Throwable ignored) {}
+                gatt = null;
+            }
+            deviceStatus.setText(isAudioConnected(device)
+                    ? "Connected · Android Bluetooth audio"
+                    : "Paired · connect it in Android Bluetooth settings");
+            modelStatus.setText(detectModel(name) + " · device identified; control protocol not verified");
+            batteryStatus.setText("Earbud battery · not exposed to LenovoBuds yet");
+            ancStatus.setText("ANC / Ambient controls remain locked until a GM2 Pro control protocol is verified.");
+            Toast.makeText(this, isAudioConnected(device)
+                    ? "GM2 Pro detected as a connected audio device"
+                    : "GM2 Pro is paired but not connected for audio", Toast.LENGTH_LONG).show();
+            return;
+        }
         try {
             if (gatt != null) { gatt.disconnect(); gatt.close(); gatt = null; }
-            String name = safeDeviceName(device);
-            deviceStatus.setText("Connecting to " + name + "…");
-            modelStatus.setText(detectModel(name) + " · name match only");
+            deviceStatus.setText("Opening BLE control link to " + name + "…");
+            modelStatus.setText(detectModel(name) + " · checking BLE services");
             gatt = device.connectGatt(this, false, gattCallback, BluetoothDevice.TRANSPORT_LE);
         } catch (Throwable error) {
-            deviceStatus.setText("Could not open a BLE connection");
+            deviceStatus.setText("Could not open a BLE control link");
             Toast.makeText(this, "This device may use classic Bluetooth only", Toast.LENGTH_LONG).show();
         }
     }
