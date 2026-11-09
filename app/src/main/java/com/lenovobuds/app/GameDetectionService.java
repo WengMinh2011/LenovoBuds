@@ -31,7 +31,11 @@ public class GameDetectionService extends Service {
                     prefs.edit().putBoolean("gaming_mode", true)
                             .putString("active_game", foreground)
                             .putString("active_profile", profile).apply();
-                    AudioProfileEngine.apply(profile);
+                    if (ProfileCatalog.CUSTOM.equals(profile)) {
+                        AudioProfileEngine.applyGains(profile, ProfileCatalog.customGains(prefs));
+                    } else {
+                        AudioProfileEngine.apply(profile);
+                    }
                     updateNotification("Gaming EQ · " + profile);
                 }
                 previousGame = foreground;

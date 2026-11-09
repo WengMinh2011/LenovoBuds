@@ -1,88 +1,71 @@
 # LenovoBuds
 
-An unofficial Android companion-app research project for Lenovo/thinkplus earbuds, starting with the **GM2 Pro** and **LE258**. This is a community prototype, not an official Lenovo app.
+**LenovoBuds ALPHA 0.1** is an unofficial Android companion-app research project for Lenovo/thinkplus earbuds, beginning with the GM2 Pro. The LE258 is a secondary research target. It is not an official Lenovo app.
 
-> **Core goal:** control the earbuds' built-in Game/Music mode from the phone app. That hardware command is **not implemented yet** for either model. The current Gaming/Music selector changes only the phone-side audio profile. No undocumented vendor commands are sent.
+![LenovoBuds logo](app/src/main/res/drawable-nodpi/lenovobuds_logo.png)
 
-## Current preview (v0.1.0)
+## Alpha UI and features
 
-- Native Android app written in Java, with no third-party runtime libraries.
-- Minimum Android 8.0 (API 26); compile/target SDK 35.
-- BLE discovery and GATT inspection. Either model may use classic Bluetooth for audio and may not appear in a BLE scan.
-- Reads the standard Bluetooth Battery Service (`180F` / `2A19`) only if the earbuds expose it. Battery reporting is not guaranteed.
-- Experimental name hints for `thinkplus GM2 pro` and `LE258`; a name match does not authenticate the hardware.
-- Local Music / Gaming EQ profiles: Music, Balanced, FPS, MOBA, Racing and RPG.
-- Per-game profile assignments and optional automatic switching using Android Usage Access.
-- Best-effort Android output-mix EQ. Phone firmware may reject it or may not route it to Bluetooth audio.
-- GitHub Actions workflow to build a debug APK and upload it as a workflow artifact.
+- Light, card-based dashboard inspired by modern headphone companion apps, with original LenovoBuds branding and an ALPHA status label.
+- Bluetooth LE discovery, GATT service inspection, and best-effort standard battery-service reading (only where exposed).
+- Music / Gaming app-side mode selector.
+- Editable five-point EQ graph: drag the points to change gain at 60 Hz, 230 Hz, 910 Hz, 3.6 kHz and 14 kHz.
+- Presets: Music, Balanced, Bass, Vocal, FPS, MOBA, Racing, RPG and Custom.
+- Game-to-profile assignment and optional automatic game detection using Android Usage Access.
+- ANC / Ambient control panel in a locked, unverified state for GM2 Pro. The visible controls are not hardware commands yet.
+- GitHub Actions workflow to build a debug APK.
 
-## Device compatibility status
+## Important device-control truth
 
-| Capability | GM2 Pro | LE258 |
-|---|---|---|
-| Bluetooth audio pairing | Android Bluetooth Settings | Android Bluetooth Settings |
-| BLE discovery / GATT inspection | Implemented; may not advertise over BLE | Implemented; may not advertise over BLE |
-| Standard BLE battery reading | Only if service is exposed | Only if service is exposed |
-| Local app EQ / game profiles | Available in preview | Available in preview |
-| Built-in low-latency / Game mode | Hardware mode documented; app command unknown | Gaming mode advertised; app command unknown |
-| Remote Game/Music switch from this app | Not implemented | Not implemented |
-| Case battery / touch remapping / onboard EQ | Not implemented | Not implemented |
+The app currently changes **phone-side EQ**, not EQ stored in the earbuds. Android's global Equalizer effect is best-effort: OEM audio policy may reject it or not route it to Bluetooth output.
 
-### GM2 Pro notes
+### Game / Music mode
 
-Several manual listings describe a built-in Music/Game toggle using the right earbud touch area held for about two seconds. Manual variants are inconsistent, so check the leaflet supplied with the exact unit. This project has no verified phone-to-earbud command for that toggle and cannot query the current internal mode. References: [manual A](https://manuals.plus/ae/1005007424603622), [manual B](https://manuals.plus/ae/1005007495084810), [manual C](https://manuals.plus/ae/1005006195112746).
+Several GM2 Pro manual listings describe changing Game/Music mode by holding the right earbud touch area for around two seconds. Those same manuals do not document a phone-app command, a vendor GATT characteristic, or a companion-app API. The UI's Music/Gaming selector therefore changes the phone EQ/profile only; it does not claim the earbud's internal low-latency mode changed. Manual variants also differ on which touch gesture is used, so check the leaflet supplied with the exact hardware revision.
 
-### LE258 notes
+### ANC / ENC
 
-The available LE258 manual describes a low-latency gaming feature but does not document a companion-app workflow or a phone command for switching it. Treat app compatibility as unconfirmed until the exact hardware revision is tested. See [LE258 manual](https://manuals.plus/ae/3256811711037133).
+Do not assume ANC exists just because an online listing uses the term. One GM2 Pro manual specification table claims Active Noise-Cancellation, but its operation text describes **ENC** for call microphone noise reduction; another GM2 Pro listing says ANC is absent. These are not equivalent features. The LE258 manual describes spatial audio, gaming low latency and **ENC Noise Cancelling**, but does not document an ANC listening mode or app control. The ALPHA exposes the future Noise Control panel but keeps ANC/Ambient disabled until the exact unit and a real vendor command are verified.
 
-Lenovo's Smart Wearable support instructions found during research refer to a different Lenovo Smart Wireless Earbuds product family (PS-1551B), so they are not evidence that the GM2 Pro or LE258 works with that app: [Lenovo support FAQ](https://support.lenovo.com/in/en/solutions/ht512473).
+References:
+- [GM2 Pro manual/specification listing](https://manuals.plus/ae/1005006195112746)
+- [GM2 Pro manual describing ENC call noise reduction and Game/Music touch mode](https://manuals.plus/ae/1005005665135687)
+- [Another GM2 Pro manual listing ANC absent](https://manuals.plus/ae/3256811614376757)
+- [LE258 manual: gaming low latency and ENC](https://manuals.plus/ae/3256811711037133)
 
-## What the app's Gaming/Music selector does today
+## Why controls need protocol research
 
-It selects a local phone-side audio profile and can trigger game-specific preset selection. It does **not** change the earbuds' internal low-latency DSP mode. The app applies a best-effort Android output-mix `Equalizer` effect (audio session 0); Android manufacturers may disable it or prevent it from affecting Bluetooth output. If that happens, profile assignment and game detection still work, but the EQ may not be audible.
+A phone app can control an earbud feature only if the earbuds expose a supported Bluetooth control path (for example, a documented BLE GATT characteristic or a vendor-specific Bluetooth command). A feature that is switched entirely inside the earbuds by a touch gesture may not be remotely controllable from Android.
 
-## Requirements for real app-to-earbud control
+For real GM2 Pro support, the next step is a short, controlled Bluetooth HCI snoop capture around a verified vendor-app action (if an app exists for this exact unit), then identify and validate the command in both directions. Do not send guessed data to arbitrary GATT characteristics. If no host-side packet is emitted, the earbud's touch gesture may be internal-only.
 
-Before implementing a hardware mode switch, we need to identify a real, reproducible command for each model/revision. Evidence could come from a Lenovo-provided companion app that explicitly supports the exact model, or a verified Bluetooth capture showing the phone sending a command while the mode changes. A physical touch gesture may be handled entirely inside the earbuds and produce no phone-side packet.
+## Build the ALPHA APK
 
-The project will not send guessed data to arbitrary GATT characteristics. Until a command has been captured and tested, the UI must label the hardware control as unavailable rather than imply that the earbud changed modes.
+1. Open the repository's Actions tab.
+2. Select the latest Build LenovoBuds APK workflow run.
+3. When the job succeeds, download the LenovoBuds-debug-apk artifact.
+4. Extract and install app-debug.apk.
 
-## Build an APK with GitHub Actions
-
-1. Open the repository's **Actions** tab.
-2. Select **Build LenovoBuds APK** (or push a commit to trigger it).
-3. Open the completed run and download the `LenovoBuds-debug-apk` artifact.
-4. Extract the artifact ZIP and install `app-debug.apk` on the phone.
+The workflow also runs automatically after commits to main. The APK is a debug build for testing, not a signed Play Store release. GitHub retains the artifact for 14 days.
 
 ## Build locally
 
-Open this folder in Android Studio, install Android SDK Platform 35, use JDK 17 and Gradle 8.9, then run:
+Use JDK 17, Gradle 8.9 and Android SDK Platform 35. Open the project in Android Studio or run: gradle assembleDebug.
 
-```bash
-gradle assembleDebug
-```
+The output is app/build/outputs/apk/debug/app-debug.apk.
 
-The APK is written to `app/build/outputs/apk/debug/app-debug.apk`.
+## Compatibility status
 
-## First use
-
-1. Pair the GM2 Pro or LE258 from Android **Settings → Bluetooth** first.
-2. Open LenovoBuds and grant the requested Bluetooth permissions.
-3. Tap **Find / connect earbuds**. The app scans for BLE devices; classic-only earbuds may not appear.
-4. If the standard BLE Battery Service exists, the app may show a percentage.
-5. Choose Music or Gaming to change the **phone-side EQ profile**. This preview does not remotely change the earbuds' built-in mode.
-6. For automatic game profiles, enable **Auto-switch when a game opens** and grant Usage Access.
-
-## Project layout
-
-- `app/src/main/java/com/lenovobuds/app/MainActivity.java` — UI, BLE scanning, GATT connection, battery reading and model-name hints.
-- `AudioProfileEngine.java` — best-effort Android global EQ.
-- `GameDetectionService.java` / `GameUtils.java` — active-game detection and profile switching.
-- `ProfileCatalog.java` — local EQ curves.
-- `docs/GM2-PRO.md` and `docs/LE258.md` — device notes and protocol status.
-- `.github/workflows/build-apk.yml` — cloud APK build.
+| Capability | GM2 Pro | LE258 |
+|---|---|---|
+| BLE discovery / GATT inspection | Implemented; may not advertise over BLE | Implemented; may not advertise over BLE |
+| Standard BLE battery service | Only if exposed | Only if exposed |
+| Phone-side EQ and custom curve | ALPHA UI available | ALPHA UI available |
+| Auto game profiles | Phone-side only | Phone-side only |
+| Earbud low-latency switch from app | Not implemented; manual gesture documented | Gaming feature documented; host command unknown |
+| Earbud ANC / transparency control | Not verified; product sources conflict | Not documented in available manual |
+| Case battery / touch remapping / onboard EQ | Not implemented | Not implemented |
 
 ## Disclaimer
 
-LenovoBuds is an unofficial community project and is not affiliated with Lenovo. Product names are used only to identify intended test devices.
+LenovoBuds is an unofficial community project and is not affiliated with Lenovo. Lenovo and thinkplus names are used only to identify intended test devices.

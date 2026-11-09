@@ -238,6 +238,8 @@ public class MainActivity extends Activity {
         LinearLayout.LayoutParams buttonsLp = params(-1, dp(46));
         buttonsLp.topMargin = dp(13);
         card.addView(buttons, buttonsLp);
+        musicButton.setOnClickListener(v -> setListeningMode(false));
+        gamingButton.setOnClickListener(v -> setListeningMode(true));
         modeStatus = text("Phone EQ: Music · Earbud low-latency control not verified", 11, MUTED, false);
         LinearLayout.LayoutParams statusLp = params(-1, -2);
         statusLp.topMargin = dp(10);
