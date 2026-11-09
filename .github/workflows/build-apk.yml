@@ -49,12 +49,7 @@ jobs:
       - name: Publish GitHub ALPHA pre-release
         if: github.ref == 'refs/heads/main'
         env:
-          GH_TOKEN: \${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
         run: |
-          TAG="v0.1.0-alpha.\${GITHUB_RUN_NUMBER}"
-          gh release create "$TAG" \
-            "app/build/outputs/apk/debug/app-debug.apk#LenovoBuds-ALPHA-0.1.0.apk" \
-            --title "LenovoBuds ALPHA 0.1.0 (build \${GITHUB_RUN_NUMBER})" \
-            --notes "Experimental LenovoBuds Android build. This ALPHA contains an editable phone-side EQ and game profiles. GM2 Pro/LE258 earbud Game/Music, ANC and Ambient commands are not verified and are not claimed to work." \
-            --prerelease \
-            --target "$GITHUB_SHA"
+          TAG="v0.1.0-alpha.${GITHUB_RUN_NUMBER}"
+          gh release create "$TAG" "app/build/outputs/apk/debug/app-debug.apk#LenovoBuds-ALPHA-0.1.0.apk" --title "LenovoBuds ALPHA 0.1.0 (build ${GITHUB_RUN_NUMBER})" --notes "Experimental LenovoBuds Android build. This ALPHA contains an editable phone-side EQ and game profiles. GM2 Pro/LE258 earbud Game/Music, ANC and Ambient commands are not verified and are not claimed to work." --prerelease --target "$GITHUB_SHA"
