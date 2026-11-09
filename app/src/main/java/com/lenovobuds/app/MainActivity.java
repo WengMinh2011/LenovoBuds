@@ -152,17 +152,17 @@ public class MainActivity extends Activity {
         namesLp.leftMargin = dp(10);
         row.addView(names, namesLp);
 
-        TextView alpha = text("ALPHA 0.1", 10, PURPLE, true);
+        TextView alpha = text("ALPHA 0.1.1", 10, PURPLE, true);
         alpha.setPadding(dp(11), dp(7), dp(11), dp(7));
         alpha.setBackground(pill(PURPLE_LIGHT, dp(18), Color.TRANSPARENT));
         row.addView(alpha);
         page.addView(row);
 
-        TextView title = text("Sound, tuned to you.", 26, TEXT, true);
+        TextView title = text("Your sound. Your setup.", 25, TEXT, true);
         LinearLayout.LayoutParams titleLp = params(-1, -2);
         titleLp.topMargin = dp(21);
         page.addView(title, titleLp);
-        TextView intro = text("Connect your earbuds and shape every listening session.", 13, MUTED, false);
+        TextView intro = text("A simple companion dashboard for your thinkplus earbuds. Some controls are still experimental.", 13, MUTED, false);
         LinearLayout.LayoutParams introLp = params(-1, -2);
         introLp.topMargin = dp(5);
         page.addView(intro, introLp);
@@ -212,12 +212,12 @@ public class MainActivity extends Activity {
         batteryRow.addView(batteryLabel, batteryLabelLp);
         card.addView(batteryRow);
 
-        Button connect = primaryButton("Connect earbuds");
+        Button connect = primaryButton("Find paired earbuds");
         connect.setOnClickListener(v -> beginScan());
         LinearLayout.LayoutParams connectLp = params(-1, dp(47));
         connectLp.topMargin = dp(15);
         card.addView(connect, connectLp);
-        TextView note = text("Pair first in Android Bluetooth settings. Battery is shown only when the earbuds expose a readable standard BLE service.", 10, MUTED, false);
+        TextView note = text("First pair your earbuds in your phone's Bluetooth settings. LenovoBuds can identify a paired device; this does not guarantee that its private controls are supported.", 11, MUTED, false);
         note.setLineSpacing(dp(2), 1f);
         LinearLayout.LayoutParams noteLp = params(-1, -2);
         noteLp.topMargin = dp(8);
@@ -242,7 +242,7 @@ public class MainActivity extends Activity {
         card.addView(buttons, buttonsLp);
         musicButton.setOnClickListener(v -> setListeningMode(false));
         gamingButton.setOnClickListener(v -> setListeningMode(true));
-        modeStatus = text("Phone EQ: Music · Earbud low-latency control not verified", 11, MUTED, false);
+        modeStatus = text("This switch changes the app's sound profile. It does not yet switch the GM2 Pro's built-in gaming mode.", 11, MUTED, false);
         LinearLayout.LayoutParams statusLp = params(-1, -2);
         statusLp.topMargin = dp(10);
         card.addView(modeStatus, statusLp);
@@ -353,11 +353,11 @@ public class MainActivity extends Activity {
         LinearLayout.LayoutParams controlsLp = params(-1, dp(43));
         controlsLp.topMargin = dp(12);
         card.addView(controls, controlsLp);
-        eqStatus = text("Drag the five points to shape your curve.", 11, MUTED, false);
+        eqStatus = text("Drag each point up to boost that frequency range, or down to reduce it. Changes are saved on this phone.", 11, MUTED, false);
         LinearLayout.LayoutParams statusLp = params(-1, -2);
         statusLp.topMargin = dp(10);
         card.addView(eqStatus, statusLp);
-        TextView limitation = text("Phone-side EQ is best-effort. Android may block global EQ or leave Bluetooth output unchanged.", 10, MUTED, false);
+        TextView limitation = text("Important: this is phone-side EQ, not an earbud firmware setting. Android or your phone manufacturer may not apply it to Bluetooth audio.", 11, MUTED, false);
         LinearLayout.LayoutParams limitationLp = params(-1, -2);
         limitationLp.topMargin = dp(5);
         card.addView(limitation, limitationLp);
@@ -382,7 +382,7 @@ public class MainActivity extends Activity {
         LinearLayout.LayoutParams manageLp = params(-1, dp(42));
         manageLp.topMargin = dp(10);
         card.addView(manage, manageLp);
-        TextView tip = text("FPS · MOBA · Racing · RPG · Music. Auto detection requires Android Usage Access.", 10, MUTED, false);
+        TextView tip = text("Choose a profile for each game. Automatic switching needs Usage Access so Android can tell which app is in the foreground. Audio changes remain phone-side.", 11, MUTED, false);
         LinearLayout.LayoutParams tipLp = params(-1, -2);
         tipLp.topMargin = dp(8);
         card.addView(tip, tipLp);
@@ -834,6 +834,22 @@ public class MainActivity extends Activity {
         LinearLayout.LayoutParams lp = params(-1, -2);
         lp.topMargin = dp(4);
         card.addView(title, lp);
+        String explanation;
+        switch (eyebrow) {
+            case "YOUR DEVICE": explanation = "See what Android can identify and what the earbuds expose."; break;
+            case "LISTENING MODE": explanation = "Choose a phone-side sound profile for music or games."; break;
+            case "NOISE CONTROL": explanation = "Hardware noise controls stay disabled until verified for your exact model."; break;
+            case "EQUALIZER": explanation = "Pick a preset or adjust five frequency bands to your preference."; break;
+            case "GAME AUDIO": explanation = "Optionally match installed games with saved EQ profiles."; break;
+            default: explanation = "";
+        }
+        if (!explanation.isEmpty()) {
+            TextView description = text(explanation, 11, MUTED, false);
+            description.setLineSpacing(dp(2), 1f);
+            LinearLayout.LayoutParams descriptionLp = params(-1, -2);
+            descriptionLp.topMargin = dp(5);
+            card.addView(description, descriptionLp);
+        }
     }
 
     private Button modeButton(String label) {
