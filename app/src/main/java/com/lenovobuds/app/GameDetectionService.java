@@ -32,7 +32,7 @@ public class GameDetectionService extends Service {
                             .putString("active_game", foreground)
                             .putString("active_profile", profile).apply();
                     AudioProfileEngine.apply(profile);
-                    updateNotification("Gaming · " + profile);
+                    updateNotification("Gaming EQ · " + profile);
                 }
                 previousGame = foreground;
             } else if (previousGame != null) {
@@ -40,7 +40,7 @@ public class GameDetectionService extends Service {
                 prefs.edit().putBoolean("gaming_mode", false)
                         .remove("active_game").putString("active_profile", ProfileCatalog.MUSIC).apply();
                 AudioProfileEngine.apply(ProfileCatalog.MUSIC);
-                updateNotification("Music mode");
+                updateNotification("Music EQ");
             }
             handler.postDelayed(this, 1800L);
         }
@@ -49,16 +49,15 @@ public class GameDetectionService extends Service {
     @Override public void onCreate() {
         super.onCreate();
         createChannel();
-        startForeground(71, buildNotification("Watching for games · Music mode"));
+        startForeground(71, buildNotification("Watching for games · Music EQ"));
         handler.post(poll);
     }
 
-    @Override public int onStartCommand(Intent intent, int flags, int startId) {
-        return START_STICKY;
-    }
+    @Override public int onStartCommand(Intent intent, int flags, int startId) { return START_STICKY; }
 
     @Override public void onDestroy() {
         handler.removeCallbacks(poll);
+        AudioProfileEngine.release();
         super.onDestroy();
     }
 
@@ -68,7 +67,7 @@ public class GameDetectionService extends Service {
         if (Build.VERSION.SDK_INT >= 26) {
             NotificationChannel channel = new NotificationChannel(CHANNEL_ID, "Automatic game audio",
                     NotificationManager.IMPORTANCE_LOW);
-            channel.setDescription("Switch LenovoBuds audio profiles when a game opens or closes.");
+            channel.setDescription("Switch LenovoBuds phone-side EQ when a game opens or closes.");
             NotificationManager manager = getSystemService(NotificationManager.class);
             if (manager != null) manager.createNotificationChannel(channel);
         }
@@ -78,7 +77,7 @@ public class GameDetectionService extends Service {
         Notification.Builder builder = Build.VERSION.SDK_INT >= 26
                 ? new Notification.Builder(this, CHANNEL_ID) : new Notification.Builder(this);
         return builder.setSmallIcon(android.R.drawable.ic_media_play)
-                .setContentTitle("LenovoBuds · Auto mode")
+                .setContentTitle("LenovoBuds · ALPHA")
                 .setContentText(text).setOngoing(true).build();
     }
 

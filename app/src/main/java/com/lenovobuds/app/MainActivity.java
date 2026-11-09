@@ -23,7 +23,6 @@ import android.content.pm.ResolveInfo;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
-import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -31,13 +30,10 @@ import android.os.Looper;
 import android.provider.Settings;
 import android.view.Gravity;
 import android.view.View;
-import android.widget.ArrayAdapter;
 import android.widget.Button;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
-import android.widget.RadioButton;
-import android.widget.RadioGroup;
 import android.widget.ScrollView;
-import android.widget.Spinner;
 import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -54,11 +50,16 @@ public class MainActivity extends Activity {
     private static final int REQ_NOTIFICATIONS = 302;
     private static final UUID BATTERY_SERVICE = UUID.fromString("0000180f-0000-1000-8000-00805f9b34fb");
     private static final UUID BATTERY_LEVEL = UUID.fromString("00002a19-0000-1000-8000-00805f9b34fb");
-    private static final int COLOR_BG = Color.rgb(11, 17, 24);
-    private static final int COLOR_CARD = Color.rgb(20, 29, 39);
-    private static final int COLOR_TEXT = Color.rgb(239, 245, 250);
-    private static final int COLOR_MUTED = Color.rgb(157, 174, 190);
-    private static final int COLOR_ACCENT = Color.rgb(114, 224, 186);
+
+    private static final int BG = Color.rgb(247, 245, 249);
+    private static final int CARD = Color.WHITE;
+    private static final int TEXT = Color.rgb(39, 28, 48);
+    private static final int MUTED = Color.rgb(132, 123, 141);
+    private static final int PURPLE = Color.rgb(133, 63, 178);
+    private static final int PURPLE_LIGHT = Color.rgb(246, 235, 252);
+    private static final int PINK = Color.rgb(235, 104, 165);
+    private static final int LINE = Color.rgb(235, 229, 239);
+    private static final int GREEN = Color.rgb(45, 153, 122);
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Map<String, BluetoothDevice> devices = new LinkedHashMap<>();
@@ -70,6 +71,8 @@ public class MainActivity extends Activity {
     private boolean scanning = false;
     private boolean pendingUsageSettings = false;
     private boolean pendingBluetoothScan = false;
+    private String selectedProfile = ProfileCatalog.MUSIC;
+    private float[] currentGains = ProfileCatalog.gains(ProfileCatalog.MUSIC);
 
     private LinearLayout page;
     private TextView deviceStatus;
@@ -77,178 +80,307 @@ public class MainActivity extends Activity {
     private TextView modelStatus;
     private TextView eqStatus;
     private TextView modeStatus;
-    private RadioGroup modeGroup;
+    private TextView ancStatus;
+    private LinearLayout profileChips;
+    private EqualizerGraphView graphView;
     private Switch autoSwitch;
-    private Spinner profileSpinner;
+    private Button musicButton;
+    private Button gamingButton;
+    private Button ancButton;
+    private Button ambientButton;
+    private Button normalButton;
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
-        getWindow().setStatusBarColor(COLOR_BG);
-        getWindow().setNavigationBarColor(COLOR_BG);
-        getWindow().getDecorView().setSystemUiVisibility(0);
+        getWindow().setStatusBarColor(BG);
+        getWindow().setNavigationBarColor(BG);
+        getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
         prefs = getSharedPreferences("lenovo_buds", MODE_PRIVATE);
         BluetoothManager manager = (BluetoothManager) getSystemService(BLUETOOTH_SERVICE);
         if (manager != null) bluetoothAdapter = manager.getAdapter();
+        selectedProfile = prefs.getString("active_profile", ProfileCatalog.MUSIC);
+        currentGains = loadCurrentGains();
         buildScreen();
-        refreshModeUi();
+        refreshUi();
     }
 
     private void buildScreen() {
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
-        scroll.setBackgroundColor(COLOR_BG);
+        scroll.setBackgroundColor(BG);
         page = new LinearLayout(this);
         page.setOrientation(LinearLayout.VERTICAL);
-        page.setPadding(dp(18), dp(22), dp(18), dp(34));
+        page.setPadding(dp(18), dp(18), dp(18), dp(34));
         scroll.addView(page);
         setContentView(scroll);
 
-        TextView brand = text("LENOVOBUDS", 13, COLOR_ACCENT, true);
-        brand.setLetterSpacing(0.13f);
-        page.addView(brand);
-        TextView title = text("Your earbuds,\nyour settings.", 30, COLOR_TEXT, true);
-        LinearLayout.LayoutParams titleLp = params(-1, -2);
-        titleLp.topMargin = dp(6);
-        page.addView(title, titleLp);
-        TextView intro = text("Unofficial Lenovo earbuds companion · early preview", 13, COLOR_MUTED, false);
-        LinearLayout.LayoutParams introLp = params(-1, -2);
-        introLp.topMargin = dp(8);
-        page.addView(intro, introLp);
-
+        buildHeader();
         buildDeviceCard();
         buildModeCard();
-        buildEqCard();
-        buildSupportCard();
+        buildNoiseCard();
+        buildEqualizerCard();
+        buildGameCard();
 
-        TextView footer = text("Pair your Lenovo earbuds in Android Settings. This preview changes phone-side EQ only; app control of the earbuds’ built-in Game/Music mode is not verified yet.", 12, COLOR_MUTED, false);
-        footer.setLineSpacing(dp(3), 1f);
-        LinearLayout.LayoutParams footerLp = params(-1, -2);
-        footerLp.topMargin = dp(10);
-        page.addView(footer, footerLp);
+        TextView foot = text("LenovoBuds is an unofficial community project. ALPHA controls marked “not verified” are deliberately locked until the exact earbud hardware and Bluetooth command are confirmed.", 11, MUTED, false);
+        foot.setLineSpacing(dp(3), 1f);
+        LinearLayout.LayoutParams footLp = params(-1, -2);
+        footLp.topMargin = dp(18);
+        page.addView(foot, footLp);
+    }
+
+    private void buildHeader() {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        ImageView logo = new ImageView(this);
+        logo.setImageResource(com.lenovobuds.app.R.drawable.lenovobuds_logo);
+        logo.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        row.addView(logo, new LinearLayout.LayoutParams(dp(48), dp(48)));
+
+        LinearLayout names = new LinearLayout(this);
+        names.setOrientation(LinearLayout.VERTICAL);
+        TextView name = text("LenovoBuds", 20, TEXT, true);
+        names.addView(name);
+        TextView sub = text("YOUR AUDIO, YOUR WAY", 9, MUTED, true);
+        sub.setLetterSpacing(0.13f);
+        LinearLayout.LayoutParams subLp = params(-1, -2);
+        subLp.topMargin = dp(2);
+        names.addView(sub, subLp);
+        LinearLayout.LayoutParams namesLp = new LinearLayout.LayoutParams(0, -2, 1f);
+        namesLp.leftMargin = dp(10);
+        row.addView(names, namesLp);
+
+        TextView alpha = text("ALPHA 0.1", 10, PURPLE, true);
+        alpha.setPadding(dp(11), dp(7), dp(11), dp(7));
+        alpha.setBackground(pill(PURPLE_LIGHT, dp(18), Color.TRANSPARENT));
+        row.addView(alpha);
+        page.addView(row);
+
+        TextView title = text("Sound, tuned to you.", 26, TEXT, true);
+        LinearLayout.LayoutParams titleLp = params(-1, -2);
+        titleLp.topMargin = dp(21);
+        page.addView(title, titleLp);
+        TextView intro = text("Connect your earbuds and shape every listening session.", 13, MUTED, false);
+        LinearLayout.LayoutParams introLp = params(-1, -2);
+        introLp.topMargin = dp(5);
+        page.addView(intro, introLp);
     }
 
     private void buildDeviceCard() {
         LinearLayout card = card();
-        addSectionHeading(card, "DEVICE", "Connect and inspect");
-        deviceStatus = text("No earbud BLE link", 17, COLOR_TEXT, true);
+        addCardHeading(card, "YOUR DEVICE", "Earbuds");
+        LinearLayout deviceRow = new LinearLayout(this);
+        deviceRow.setOrientation(LinearLayout.HORIZONTAL);
+        deviceRow.setGravity(Gravity.CENTER_VERTICAL);
+        ImageView image = new ImageView(this);
+        image.setImageResource(com.lenovobuds.app.R.drawable.lenovobuds_logo);
+        image.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        image.setPadding(dp(8), dp(8), dp(8), dp(8));
+        image.setBackground(pill(PURPLE_LIGHT, dp(16), Color.TRANSPARENT));
+        deviceRow.addView(image, new LinearLayout.LayoutParams(dp(72), dp(72)));
+
+        LinearLayout details = new LinearLayout(this);
+        details.setOrientation(LinearLayout.VERTICAL);
+        TextView model = text("thinkplus GM2 Pro", 17, TEXT, true);
+        details.addView(model);
+        deviceStatus = text("Not connected", 12, MUTED, false);
         LinearLayout.LayoutParams statusLp = params(-1, -2);
-        statusLp.topMargin = dp(12);
-        card.addView(deviceStatus, statusLp);
-        modelStatus = text("Targets: thinkplus GM2 Pro + LE258 · experimental name detection", 12, COLOR_MUTED, false);
+        statusLp.topMargin = dp(4);
+        details.addView(deviceStatus, statusLp);
+        modelStatus = text("Target profile · GM2 Pro", 11, MUTED, false);
         LinearLayout.LayoutParams modelLp = params(-1, -2);
-        modelLp.topMargin = dp(5);
-        card.addView(modelStatus, modelLp);
-        batteryStatus = text("Battery: not available", 13, COLOR_MUTED, false);
-        LinearLayout.LayoutParams batteryLp = params(-1, -2);
-        batteryLp.topMargin = dp(9);
-        card.addView(batteryStatus, batteryLp);
-        Button scan = button("Find / connect earbuds");
-        scan.setOnClickListener(v -> beginScan());
-        LinearLayout.LayoutParams scanLp = params(-1, dp(48));
-        scanLp.topMargin = dp(14);
-        card.addView(scan, scanLp);
-        TextView note = text("Scan looks for BLE advertisements. Some earbuds expose only classic Bluetooth audio and may not appear here.", 11, COLOR_MUTED, false);
+        modelLp.topMargin = dp(3);
+        details.addView(modelStatus, modelLp);
+        LinearLayout.LayoutParams detailsLp = new LinearLayout.LayoutParams(0, -2, 1f);
+        detailsLp.leftMargin = dp(13);
+        deviceRow.addView(details, detailsLp);
+        card.addView(deviceRow);
+
+        LinearLayout batteryRow = new LinearLayout(this);
+        batteryRow.setOrientation(LinearLayout.HORIZONTAL);
+        batteryRow.setGravity(Gravity.CENTER_VERTICAL);
+        batteryStatus = text("L  —%     R  —%     CASE  —%", 11, MUTED, true);
+        LinearLayout.LayoutParams batteryLp = new LinearLayout.LayoutParams(0, -2, 1f);
+        batteryLp.topMargin = dp(14);
+        batteryRow.addView(batteryStatus, batteryLp);
+        TextView batteryLabel = text("BATTERY", 9, MUTED, true);
+        batteryLabel.setLetterSpacing(0.08f);
+        LinearLayout.LayoutParams batteryLabelLp = params(-2, -2);
+        batteryLabelLp.topMargin = dp(14);
+        batteryRow.addView(batteryLabel, batteryLabelLp);
+        card.addView(batteryRow);
+
+        Button connect = primaryButton("Connect earbuds");
+        connect.setOnClickListener(v -> beginScan());
+        LinearLayout.LayoutParams connectLp = params(-1, dp(47));
+        connectLp.topMargin = dp(15);
+        card.addView(connect, connectLp);
+        TextView note = text("Pair first in Android Bluetooth settings. Battery is shown only when the earbuds expose a readable standard BLE service.", 10, MUTED, false);
         note.setLineSpacing(dp(2), 1f);
         LinearLayout.LayoutParams noteLp = params(-1, -2);
-        noteLp.topMargin = dp(9);
+        noteLp.topMargin = dp(8);
         card.addView(note, noteLp);
         page.addView(card, cardMargins());
     }
 
     private void buildModeCard() {
         LinearLayout card = card();
-        addSectionHeading(card, "APP AUDIO PROFILE", "Choose this phone’s audio profile");
-        modeGroup = new RadioGroup(this);
-        modeGroup.setOrientation(RadioGroup.HORIZONTAL);
-        RadioButton music = radio("Music", 1);
-        RadioButton gaming = radio("Gaming", 2);
-        modeGroup.addView(music, new RadioGroup.LayoutParams(0, dp(48), 1f));
-        modeGroup.addView(gaming, new RadioGroup.LayoutParams(0, dp(48), 1f));
-        LinearLayout.LayoutParams groupLp = params(-1, dp(52));
-        groupLp.topMargin = dp(14);
-        card.addView(modeGroup, groupLp);
-        modeGroup.setOnCheckedChangeListener((group, checkedId) -> {
-            if (checkedId == 1) setMode(false, null);
-            else if (checkedId == 2) setMode(true, selectedProfile());
-        });
-        modeStatus = text("Local app profile · Music", 12, COLOR_MUTED, false);
-        LinearLayout.LayoutParams modeLp = params(-1, -2);
-        modeLp.topMargin = dp(7);
-        card.addView(modeStatus, modeLp);
-        TextView hardwareNote = text("Earbud Game/Music control from this app is not verified for GM2 Pro or LE258. This selector changes only the phone-side audio profile.", 11, COLOR_MUTED, false);
-        hardwareNote.setLineSpacing(dp(2), 1f);
-        LinearLayout.LayoutParams hardwareLp = params(-1, -2);
-        hardwareLp.topMargin = dp(7);
-        card.addView(hardwareNote, hardwareLp);
-
-        autoSwitch = new Switch(this);
-        autoSwitch.setText("Auto-switch when a game opens");
-        autoSwitch.setTextColor(COLOR_TEXT);
-        autoSwitch.setTextSize(14);
-        autoSwitch.setPadding(0, dp(5), 0, dp(5));
-        autoSwitch.setChecked(prefs.getBoolean("auto_game_mode", false));
-        LinearLayout.LayoutParams autoLp = params(-1, -2);
-        autoLp.topMargin = dp(12);
-        card.addView(autoSwitch, autoLp);
-        autoSwitch.setOnCheckedChangeListener((buttonView, checked) -> onAutoSwitchChanged(checked));
-        TextView helper = text("Automatic detection uses Android Usage Access. You can revoke it any time in system settings.", 11, COLOR_MUTED, false);
-        LinearLayout.LayoutParams helperLp = params(-1, -2);
-        helperLp.topMargin = dp(4);
-        card.addView(helper, helperLp);
+        addCardHeading(card, "LISTENING MODE", "Choose your session");
+        LinearLayout buttons = new LinearLayout(this);
+        buttons.setOrientation(LinearLayout.HORIZONTAL);
+        musicButton = modeButton("Music");
+        gamingButton = modeButton("Gaming");
+        LinearLayout.LayoutParams first = new LinearLayout.LayoutParams(0, dp(46), 1f);
+        LinearLayout.LayoutParams second = new LinearLayout.LayoutParams(0, dp(46), 1f);
+        second.leftMargin = dp(9);
+        buttons.addView(musicButton, first);
+        buttons.addView(gamingButton, second);
+        LinearLayout.LayoutParams buttonsLp = params(-1, dp(46));
+        buttonsLp.topMargin = dp(13);
+        card.addView(buttons, buttonsLp);
+        modeStatus = text("Phone EQ: Music · Earbud low-latency control not verified", 11, MUTED, false);
+        LinearLayout.LayoutParams statusLp = params(-1, -2);
+        statusLp.topMargin = dp(10);
+        card.addView(modeStatus, statusLp);
         page.addView(card, cardMargins());
     }
 
-    private void buildEqCard() {
+    private void buildNoiseCard() {
         LinearLayout card = card();
-        addSectionHeading(card, "EQUALIZER", "Choose a starting curve");
-        profileSpinner = new Spinner(this);
-        ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, ProfileCatalog.names());
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        profileSpinner.setAdapter(adapter);
-        profileSpinner.setSelection(indexOf(ProfileCatalog.names(), prefs.getString("active_profile", ProfileCatalog.FPS)));
-        LinearLayout.LayoutParams spinnerLp = params(-1, dp(48));
-        spinnerLp.topMargin = dp(12);
-        card.addView(profileSpinner, spinnerLp);
-        profileSpinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
-            @Override public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) {
-                String profile = ProfileCatalog.names()[position];
-                prefs.edit().putString("active_profile", profile).apply();
-                if (prefs.getBoolean("gaming_mode", false)) {
-                    AudioProfileEngine.apply(profile);
-                    updateEqStatus();
-                }
+        addCardHeading(card, "NOISE CONTROL", "ANC & ambient sound");
+        LinearLayout modes = new LinearLayout(this);
+        modes.setOrientation(LinearLayout.HORIZONTAL);
+        normalButton = modeButton("Off");
+        ancButton = modeButton("ANC");
+        ambientButton = modeButton("Ambient");
+        normalButton.setOnClickListener(v -> {
+            prefs.edit().putString("noise_profile", "Off").apply();
+            updateNoiseUi();
+        });
+        ancButton.setOnClickListener(v -> showNoiseUnavailable("ANC"));
+        ambientButton.setOnClickListener(v -> showNoiseUnavailable("Ambient sound"));
+        ancButton.setEnabled(false);
+        ambientButton.setEnabled(false);
+        LinearLayout.LayoutParams a = new LinearLayout.LayoutParams(0, dp(42), 1f);
+        LinearLayout.LayoutParams b = new LinearLayout.LayoutParams(0, dp(42), 1f);
+        LinearLayout.LayoutParams c = new LinearLayout.LayoutParams(0, dp(42), 1f);
+        b.leftMargin = dp(7); c.leftMargin = dp(7);
+        modes.addView(normalButton, a);
+        modes.addView(ancButton, b);
+        modes.addView(ambientButton, c);
+        LinearLayout.LayoutParams modesLp = params(-1, dp(42));
+        modesLp.topMargin = dp(14);
+        card.addView(modes, modesLp);
+        ancStatus = text("ANC is locked in this ALPHA: the exact GM2 Pro revision's listening-mode ANC support and phone command have not been verified.", 11, MUTED, false);
+        ancStatus.setLineSpacing(dp(2), 1f);
+        LinearLayout.LayoutParams statusLp = params(-1, -2);
+        statusLp.topMargin = dp(10);
+        card.addView(ancStatus, statusLp);
+        Button details = secondaryButton("Why are ANC controls locked?");
+        details.setOnClickListener(v -> showNoiseUnavailable("ANC / Ambient"));
+        LinearLayout.LayoutParams detailsLp = params(-1, dp(40));
+        detailsLp.topMargin = dp(10);
+        card.addView(details, detailsLp);
+        page.addView(card, cardMargins());
+    }
+
+    private void buildEqualizerCard() {
+        LinearLayout card = card();
+        addCardHeading(card, "EQUALIZER", "Make it sound right");
+        profileChips = new LinearLayout(this);
+        profileChips.setOrientation(LinearLayout.HORIZONTAL);
+        profileChips.setGravity(Gravity.CENTER_VERTICAL);
+        profileChips.setPadding(0, dp(5), 0, dp(4));
+        ScrollView horizontal = new ScrollView(this);
+        horizontal.setHorizontalScrollBarEnabled(false);
+        horizontal.setVerticalScrollBarEnabled(false);
+        horizontal.setFillViewport(false);
+        horizontal.setHorizontalFadingEdgeEnabled(false);
+        horizontal.addView(profileChips);
+        LinearLayout.LayoutParams horizontalLp = params(-1, dp(50));
+        horizontalLp.topMargin = dp(8);
+        card.addView(horizontal, horizontalLp);
+        rebuildProfileChips();
+
+        graphView = new EqualizerGraphView(this);
+        graphView.setGains(currentGains);
+        graphView.setOnGainsChanged(gains -> {
+            currentGains = gains;
+            selectedProfile = ProfileCatalog.CUSTOM;
+            prefs.edit().putString("active_profile", selectedProfile)
+                    .putString("custom_eq_gains", encodeGains(gains)).apply();
+            if (prefs.getBoolean("gaming_mode", false)) {
+                eqStatus.setText(AudioProfileEngine.applyGains(selectedProfile, gains));
+            } else {
+                eqStatus.setText("Custom curve saved · select Gaming or press Apply to preview");
             }
-            @Override public void onNothingSelected(android.widget.AdapterView<?> parent) {}
+            rebuildProfileChips();
         });
-        Button manage = button("Assign EQ profiles to installed games");
-        manage.setOnClickListener(v -> showGameProfiles());
-        LinearLayout.LayoutParams manageLp = params(-1, dp(46));
-        manageLp.topMargin = dp(12);
-        card.addView(manage, manageLp);
-        eqStatus = text("EQ: waiting for selection", 12, COLOR_MUTED, false);
-        LinearLayout.LayoutParams eqLp = params(-1, -2);
-        eqLp.topMargin = dp(10);
-        card.addView(eqStatus, eqLp);
-        TextView warning = text("Android global EQ is best-effort. Some phones disable output-mix effects or do not route them to Bluetooth.", 11, COLOR_MUTED, false);
-        warning.setLineSpacing(dp(2), 1f);
-        LinearLayout.LayoutParams warningLp = params(-1, -2);
-        warningLp.topMargin = dp(6);
-        card.addView(warning, warningLp);
+        LinearLayout.LayoutParams graphLp = params(-1, dp(190));
+        graphLp.topMargin = dp(3);
+        card.addView(graphView, graphLp);
+
+        LinearLayout legend = new LinearLayout(this);
+        legend.setOrientation(LinearLayout.HORIZONTAL);
+        legend.setGravity(Gravity.CENTER_VERTICAL);
+        String[] labels = {"BASS", "LOW", "MID", "HIGH", "TREBLE"};
+        for (String label : labels) {
+            TextView t = text(label, 8, MUTED, true);
+            t.setGravity(Gravity.CENTER);
+            legend.addView(t, new LinearLayout.LayoutParams(0, dp(20), 1f));
+        }
+        card.addView(legend);
+
+        LinearLayout controls = new LinearLayout(this);
+        controls.setOrientation(LinearLayout.HORIZONTAL);
+        Button reset = secondaryButton("Reset");
+        reset.setOnClickListener(v -> selectProfile(selectedProfile.equals(ProfileCatalog.CUSTOM) ? ProfileCatalog.BALANCED : selectedProfile));
+        Button apply = primaryButton("Apply EQ");
+        apply.setOnClickListener(v -> {
+            String status = AudioProfileEngine.applyGains(selectedProfile, currentGains);
+            eqStatus.setText(status);
+            Toast.makeText(this, "Applied " + selectedProfile + " phone EQ", Toast.LENGTH_SHORT).show();
+        });
+        controls.addView(reset, new LinearLayout.LayoutParams(0, dp(43), 1f));
+        LinearLayout.LayoutParams applyLp = new LinearLayout.LayoutParams(0, dp(43), 1f);
+        applyLp.leftMargin = dp(8);
+        controls.addView(apply, applyLp);
+        LinearLayout.LayoutParams controlsLp = params(-1, dp(43));
+        controlsLp.topMargin = dp(12);
+        card.addView(controls, controlsLp);
+        eqStatus = text("Drag the five points to shape your curve.", 11, MUTED, false);
+        LinearLayout.LayoutParams statusLp = params(-1, -2);
+        statusLp.topMargin = dp(10);
+        card.addView(eqStatus, statusLp);
+        TextView limitation = text("Phone-side EQ is best-effort. Android may block global EQ or leave Bluetooth output unchanged.", 10, MUTED, false);
+        LinearLayout.LayoutParams limitationLp = params(-1, -2);
+        limitationLp.topMargin = dp(5);
+        card.addView(limitation, limitationLp);
         page.addView(card, cardMargins());
     }
 
-    private void buildSupportCard() {
+    private void buildGameCard() {
         LinearLayout card = card();
-        addSectionHeading(card, "PROTOCOL STATUS", "What works in this preview");
-        addBullet(card, "BLE discovery and GATT service inspection");
-        addBullet(card, "Standard Bluetooth Battery Service (if the buds expose it)");
-        addBullet(card, "Local EQ presets and game-to-profile assignments");
-        addBullet(card, "Automatic Music / Gaming selection via Usage Access");
-        TextView pending = text("Remote Game/Music control, touch remapping, case battery and onboard EQ are not implemented for GM2 Pro or LE258. No guessed vendor packets are sent.", 12, COLOR_ACCENT, false);
-        pending.setLineSpacing(dp(3), 1f);
-        LinearLayout.LayoutParams pendingLp = params(-1, -2);
-        pendingLp.topMargin = dp(12);
-        card.addView(pending, pendingLp);
+        addCardHeading(card, "GAME AUDIO", "Automatic game profiles");
+        autoSwitch = new Switch(this);
+        autoSwitch.setText("Switch when a game opens");
+        autoSwitch.setTextColor(TEXT);
+        autoSwitch.setTextSize(13);
+        autoSwitch.setChecked(prefs.getBoolean("auto_game_mode", false));
+        LinearLayout.LayoutParams switchLp = params(-1, -2);
+        switchLp.topMargin = dp(9);
+        card.addView(autoSwitch, switchLp);
+        autoSwitch.setOnCheckedChangeListener((button, checked) -> onAutoSwitchChanged(checked));
+
+        Button manage = secondaryButton("Assign profiles to installed games");
+        manage.setOnClickListener(v -> showGameProfiles());
+        LinearLayout.LayoutParams manageLp = params(-1, dp(42));
+        manageLp.topMargin = dp(10);
+        card.addView(manage, manageLp);
+        TextView tip = text("FPS · MOBA · Racing · RPG · Music. Auto detection requires Android Usage Access.", 10, MUTED, false);
+        LinearLayout.LayoutParams tipLp = params(-1, -2);
+        tipLp.topMargin = dp(8);
+        card.addView(tip, tipLp);
         page.addView(card, cardMargins());
     }
 
@@ -256,14 +388,11 @@ public class MainActivity extends Activity {
         if (!checked) {
             prefs.edit().putBoolean("auto_game_mode", false).apply();
             stopService(new Intent(this, GameDetectionService.class));
-            refreshModeUi();
             return;
         }
         if (!GameUtils.hasUsageAccess(this)) {
             pendingUsageSettings = true;
-            autoSwitch.setOnCheckedChangeListener(null);
-            autoSwitch.setChecked(false);
-            autoSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> onAutoSwitchChanged(isChecked));
+            setAutoSwitchChecked(false);
             Toast.makeText(this, "Enable Usage Access for LenovoBuds, then return here.", Toast.LENGTH_LONG).show();
             try { startActivity(new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)); }
             catch (Throwable error) { Toast.makeText(this, "Could not open Usage Access settings", Toast.LENGTH_SHORT).show(); }
@@ -275,55 +404,106 @@ public class MainActivity extends Activity {
         startAutoService();
     }
 
+    private void setAutoSwitchChecked(boolean checked) {
+        if (autoSwitch == null) return;
+        autoSwitch.setOnCheckedChangeListener(null);
+        autoSwitch.setChecked(checked);
+        autoSwitch.setOnCheckedChangeListener((button, value) -> onAutoSwitchChanged(value));
+    }
+
     private void startAutoService() {
         prefs.edit().putBoolean("auto_game_mode", true).apply();
         Intent service = new Intent(this, GameDetectionService.class);
         try {
             if (Build.VERSION.SDK_INT >= 26) startForegroundService(service); else startService(service);
-            Toast.makeText(this, "Automatic game switching enabled", Toast.LENGTH_SHORT).show();
+            setAutoSwitchChecked(true);
+            Toast.makeText(this, "Automatic game profiles enabled", Toast.LENGTH_SHORT).show();
         } catch (Throwable error) {
             prefs.edit().putBoolean("auto_game_mode", false).apply();
-            if (autoSwitch != null) autoSwitch.setChecked(false);
-            Toast.makeText(this, "Android blocked the background monitor on this device", Toast.LENGTH_LONG).show();
+            setAutoSwitchChecked(false);
+            Toast.makeText(this, "Android blocked the background game monitor", Toast.LENGTH_LONG).show();
         }
-        refreshModeUi();
     }
 
-    private void setMode(boolean gaming, String profile) {
-        String selected = gaming ? (profile == null ? selectedProfile() : profile) : ProfileCatalog.MUSIC;
-        prefs.edit().putBoolean("gaming_mode", gaming).putString("active_profile", selected).apply();
-        AudioProfileEngine.apply(selected);
-        updateEqStatus();
-        modeStatus.setText("Local app profile · " + (gaming ? "Gaming" : "Music") + " · " + selected + " (earbud mode unchanged)");
-        refreshModeUi();
+    private void selectProfile(String profile) {
+        selectedProfile = profile;
+        currentGains = profile.equals(ProfileCatalog.CUSTOM)
+                ? ProfileCatalog.customGains(prefs) : ProfileCatalog.gains(profile);
+        prefs.edit().putString("active_profile", profile).apply();
+        if (graphView != null) graphView.setGains(currentGains);
+        rebuildProfileChips();
+        if (eqStatus != null) eqStatus.setText("Selected " + profile + " · press Apply EQ to preview");
+        if (profile.equals(ProfileCatalog.MUSIC)) {
+            prefs.edit().putBoolean("gaming_mode", false).apply();
+        } else {
+            prefs.edit().putBoolean("gaming_mode", true).apply();
+        }
+        refreshModeButtons();
     }
 
-    private void refreshModeUi() {
-        if (modeGroup != null) {
-            int selected = prefs.getBoolean("gaming_mode", false) ? 2 : 1;
-            if (modeGroup.getCheckedRadioButtonId() != selected) modeGroup.check(selected);
+    private void setListeningMode(boolean gaming) {
+        if (gaming) {
+            if (selectedProfile.equals(ProfileCatalog.MUSIC)) selectProfile(ProfileCatalog.FPS);
+            prefs.edit().putBoolean("gaming_mode", true).apply();
+            eqStatus.setText(AudioProfileEngine.applyGains(selectedProfile, currentGains));
+            modeStatus.setText("Gaming EQ selected · earbud low-latency command not yet verified");
+        } else {
+            prefs.edit().putBoolean("gaming_mode", false).apply();
+            selectProfile(ProfileCatalog.MUSIC);
+            modeStatus.setText("Music EQ selected · phone-side audio profile");
         }
-        if (autoSwitch != null && autoSwitch.isChecked() != prefs.getBoolean("auto_game_mode", false)) {
-            autoSwitch.setOnCheckedChangeListener(null);
-            autoSwitch.setChecked(prefs.getBoolean("auto_game_mode", false));
-            autoSwitch.setOnCheckedChangeListener((buttonView, checked) -> onAutoSwitchChanged(checked));
-        }
-        if (modeStatus != null) {
-            String mode = prefs.getBoolean("gaming_mode", false) ? "Gaming" : "Music";
-            String profile = prefs.getString("active_profile", ProfileCatalog.MUSIC);
-            modeStatus.setText("Local app profile · " + mode + " · " + profile + " (earbud mode unchanged)");
-        }
-        updateEqStatus();
+        refreshModeButtons();
     }
 
-    private void updateEqStatus() {
-        if (eqStatus != null) eqStatus.setText(AudioProfileEngine.status());
+    private void refreshModeButtons() {
+        boolean gaming = prefs.getBoolean("gaming_mode", false);
+        if (musicButton != null) styleModeButton(musicButton, !gaming);
+        if (gamingButton != null) styleModeButton(gamingButton, gaming);
     }
 
-    private String selectedProfile() {
-        if (profileSpinner != null && profileSpinner.getSelectedItem() != null)
-            return String.valueOf(profileSpinner.getSelectedItem());
-        return prefs.getString("active_profile", ProfileCatalog.FPS);
+    private void updateNoiseUi() {
+        String value = prefs.getString("noise_profile", "Off");
+        styleModeButton(normalButton, "Off".equals(value));
+        ancStatus.setText("ANC / ambient controls remain locked until supported by this exact earbud revision and a real control command is verified.");
+    }
+
+    private void showNoiseUnavailable(String feature) {
+        new AlertDialog.Builder(this)
+                .setTitle(feature + " control unavailable")
+                .setMessage("This ALPHA does not yet have a verified ANC or transparency command for the GM2 Pro. GM2 Pro documentation is inconsistent: one specification table claims ANC, while other text describes ENC for call microphones. ENC is not the same as listening-mode ANC. The app will not pretend this switch changes the earbuds.")
+                .setPositiveButton("Got it", null).show();
+    }
+
+    private void rebuildProfileChips() {
+        if (profileChips == null) return;
+        profileChips.removeAllViews();
+        for (String name : ProfileCatalog.names()) {
+            Button chip = chipButton(name, name.equals(selectedProfile));
+            chip.setOnClickListener(v -> selectProfile(name));
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, dp(36));
+            lp.rightMargin = dp(7);
+            profileChips.addView(chip, lp);
+        }
+    }
+
+    private float[] loadCurrentGains() {
+        String profile = prefs.getString("active_profile", ProfileCatalog.MUSIC);
+        return profile.equals(ProfileCatalog.CUSTOM) ? ProfileCatalog.customGains(prefs) : ProfileCatalog.gains(profile);
+    }
+
+    private String encodeGains(float[] gains) {
+        StringBuilder builder = new StringBuilder();
+        for (int i = 0; i < gains.length; i++) {
+            if (i > 0) builder.append(',');
+            builder.append(gains[i]);
+        }
+        return builder.toString();
+    }
+
+    private void refreshUi() {
+        refreshModeButtons();
+        if (ancStatus != null) updateNoiseUi();
+        if (autoSwitch != null) setAutoSwitchChecked(prefs.getBoolean("auto_game_mode", false));
     }
 
     private void showGameProfiles() {
@@ -360,20 +540,16 @@ public class MainActivity extends Activity {
     }
 
     private void chooseGameProfile(String packageName, String gameName) {
-        String[] profiles = ProfileCatalog.names();
+        String[] profiles = {ProfileCatalog.FPS, ProfileCatalog.MOBA, ProfileCatalog.RACING, ProfileCatalog.RPG, ProfileCatalog.MUSIC, ProfileCatalog.BALANCED};
         String current = prefs.getString("game_profile_" + packageName, ProfileCatalog.FPS);
-        int selected = indexOf(profiles, current);
+        int selected = 0;
+        for (int i = 0; i < profiles.length; i++) if (profiles[i].equals(current)) selected = i;
         new AlertDialog.Builder(this).setTitle(gameName + " EQ")
                 .setSingleChoiceItems(profiles, selected, (dialog, which) -> {
                     String profile = profiles[which];
                     prefs.edit().putString("game_profile_" + packageName, profile).apply();
                     Toast.makeText(this, gameName + " → " + profile, Toast.LENGTH_SHORT).show();
-                    if (packageName.equals(prefs.getString("active_game", ""))) {
-                        prefs.edit().putString("active_profile", profile).apply();
-                        AudioProfileEngine.apply(profile);
-                    }
                     dialog.dismiss();
-                    refreshModeUi();
                 }).setNegativeButton("Close", null).show();
     }
 
@@ -425,14 +601,15 @@ public class MainActivity extends Activity {
         } catch (SecurityException error) {
             Toast.makeText(this, "Bluetooth permission was not granted", Toast.LENGTH_LONG).show();
         } catch (Throwable error) {
-            showDevicePicker("Could not start BLE scan. Check Bluetooth and location settings.");
+            showDevicePicker("Could not start BLE scan. Check Bluetooth settings.");
         }
     }
 
     private void addPairedDevices() {
         try {
-            for (BluetoothDevice device : bluetoothAdapter.getBondedDevices())
-                devices.put(device.getAddress(), device);
+            if (bluetoothAdapter != null)
+                for (BluetoothDevice device : bluetoothAdapter.getBondedDevices())
+                    devices.put(device.getAddress(), device);
         } catch (SecurityException ignored) {}
     }
 
@@ -456,8 +633,7 @@ public class MainActivity extends Activity {
         String[] labels = new String[list.size()];
         for (int i = 0; i < list.size(); i++) {
             BluetoothDevice d = list.get(i);
-            String name = safeDeviceName(d);
-            labels[i] = name + "\n" + d.getAddress();
+            labels[i] = safeDeviceName(d) + "\n" + d.getAddress();
         }
         new AlertDialog.Builder(this).setTitle("Found Bluetooth devices")
                 .setMessage(message)
@@ -477,7 +653,7 @@ public class MainActivity extends Activity {
             if (gatt != null) { gatt.disconnect(); gatt.close(); gatt = null; }
             String name = safeDeviceName(device);
             deviceStatus.setText("Connecting to " + name + "…");
-            modelStatus.setText("Checking advertised name and GATT services…");
+            modelStatus.setText(detectModel(name) + " · name match only");
             gatt = device.connectGatt(this, false, gattCallback, BluetoothDevice.TRANSPORT_LE);
         } catch (Throwable error) {
             deviceStatus.setText("Could not open a BLE connection");
@@ -490,12 +666,10 @@ public class MainActivity extends Activity {
             runOnUiThread(() -> {
                 if (newState == BluetoothProfile.STATE_CONNECTED) {
                     deviceStatus.setText("BLE connected · discovering services…");
-                    String label = safeDeviceName(bluetoothGatt.getDevice());
-                    modelStatus.setText(detectModel(label) + " · name match only; protocol not verified");
+                    modelStatus.setText(detectModel(safeDeviceName(bluetoothGatt.getDevice())) + " · checking services");
                     try { bluetoothGatt.discoverServices(); } catch (Throwable ignored) {}
                 } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
-                    deviceStatus.setText("BLE disconnected");
-                    batteryStatus.setText("Battery: unavailable");
+                    deviceStatus.setText("Bluetooth audio may still be connected; BLE link disconnected");
                     if (gatt == bluetoothGatt) gatt = null;
                     try { bluetoothGatt.close(); } catch (Throwable ignored) {}
                 } else if (status != BluetoothGatt.GATT_SUCCESS) {
@@ -505,39 +679,31 @@ public class MainActivity extends Activity {
         }
 
         @Override public void onServicesDiscovered(BluetoothGatt bluetoothGatt, int status) {
-            if (status != BluetoothGatt.GATT_SUCCESS) {
-                runOnUiThread(() -> modelStatus.setText("GATT service discovery failed"));
-                return;
-            }
+            if (status != BluetoothGatt.GATT_SUCCESS) return;
             BluetoothGattService battery = bluetoothGatt.getService(BATTERY_SERVICE);
             BluetoothGattCharacteristic level = battery == null ? null : battery.getCharacteristic(BATTERY_LEVEL);
             runOnUiThread(() -> {
                 deviceStatus.setText("BLE link connected");
-                if (level == null) batteryStatus.setText("Battery: standard battery service not exposed");
-                else batteryStatus.setText("Battery service found · reading…");
+                if (level == null) batteryStatus.setText("L —%     R —%     CASE —%  ·  service not exposed");
             });
             if (level != null) {
                 try { bluetoothGatt.readCharacteristic(level); } catch (Throwable ignored) {}
             }
         }
 
-        @Override public void onCharacteristicRead(BluetoothGatt bluetoothGatt,
-                BluetoothGattCharacteristic characteristic, int status) {
+        @Override public void onCharacteristicRead(BluetoothGatt bluetoothGatt, BluetoothGattCharacteristic characteristic, int status) {
             updateBatteryRead(characteristic, characteristic.getValue(), status);
         }
 
-        @Override public void onCharacteristicRead(BluetoothGatt bluetoothGatt,
-                BluetoothGattCharacteristic characteristic, byte[] value, int status) {
+        @Override public void onCharacteristicRead(BluetoothGatt bluetoothGatt, BluetoothGattCharacteristic characteristic, byte[] value, int status) {
             updateBatteryRead(characteristic, value, status);
         }
     };
 
     private void updateBatteryRead(BluetoothGattCharacteristic characteristic, byte[] value, int status) {
-        if (BATTERY_LEVEL.equals(characteristic.getUuid()) && status == BluetoothGatt.GATT_SUCCESS) {
-            if (value != null && value.length > 0) {
-                int percent = value[0] & 0xff;
-                runOnUiThread(() -> batteryStatus.setText("Battery: " + percent + "% · standard BLE reading"));
-            }
+        if (BATTERY_LEVEL.equals(characteristic.getUuid()) && status == BluetoothGatt.GATT_SUCCESS && value != null && value.length > 0) {
+            int percent = value[0] & 0xff;
+            runOnUiThread(() -> batteryStatus.setText("L/R —%     BATTERY " + percent + "%     CASE —%"));
         }
     }
 
@@ -572,7 +738,7 @@ public class MainActivity extends Activity {
             if (hasBluetoothPermissions()) beginScan();
             else Toast.makeText(this, "Bluetooth permissions are required to scan", Toast.LENGTH_LONG).show();
         } else if (requestCode == REQ_NOTIFICATIONS) {
-            if (autoSwitch != null && autoSwitch.isChecked() && GameUtils.hasUsageAccess(this)) startAutoService();
+            if (GameUtils.hasUsageAccess(this) && prefs.getBoolean("auto_game_mode", false)) startAutoService();
         }
     }
 
@@ -580,18 +746,10 @@ public class MainActivity extends Activity {
         super.onResume();
         if (pendingUsageSettings) {
             pendingUsageSettings = false;
-            if (GameUtils.hasUsageAccess(this)) {
-                if (autoSwitch != null) {
-                    autoSwitch.setOnCheckedChangeListener(null);
-                    autoSwitch.setChecked(true);
-                    autoSwitch.setOnCheckedChangeListener((buttonView, checked) -> onAutoSwitchChanged(checked));
-                }
-                startAutoService();
-            } else {
-                Toast.makeText(this, "Usage Access was not enabled", Toast.LENGTH_SHORT).show();
-            }
+            if (GameUtils.hasUsageAccess(this)) startAutoService();
+            else Toast.makeText(this, "Usage Access was not enabled", Toast.LENGTH_SHORT).show();
         }
-        refreshModeUi();
+        refreshUi();
     }
 
     @Override protected void onDestroy() {
@@ -600,6 +758,7 @@ public class MainActivity extends Activity {
             try { gatt.disconnect(); gatt.close(); } catch (Throwable ignored) {}
             gatt = null;
         }
+        AudioProfileEngine.release();
         super.onDestroy();
     }
 
@@ -608,52 +767,85 @@ public class MainActivity extends Activity {
         layout.setOrientation(LinearLayout.VERTICAL);
         layout.setPadding(dp(16), dp(16), dp(16), dp(16));
         GradientDrawable bg = new GradientDrawable();
-        bg.setColor(COLOR_CARD);
-        bg.setCornerRadius(dp(18));
+        bg.setColor(CARD);
+        bg.setCornerRadius(dp(21));
         layout.setBackground(bg);
+        layout.setElevation(dp(2));
         return layout;
     }
 
-    private void addSectionHeading(LinearLayout card, String eyebrow, String heading) {
-        TextView small = text(eyebrow, 10, COLOR_ACCENT, true);
-        small.setLetterSpacing(0.12f);
+    private void addCardHeading(LinearLayout card, String eyebrow, String heading) {
+        TextView small = text(eyebrow, 9, PURPLE, true);
+        small.setLetterSpacing(0.13f);
         card.addView(small);
-        TextView title = text(heading, 18, COLOR_TEXT, true);
+        TextView title = text(heading, 18, TEXT, true);
         LinearLayout.LayoutParams lp = params(-1, -2);
-        lp.topMargin = dp(5);
+        lp.topMargin = dp(4);
         card.addView(title, lp);
     }
 
-    private void addBullet(LinearLayout card, String line) {
-        TextView item = text("•  " + line, 12, COLOR_MUTED, false);
-        LinearLayout.LayoutParams lp = params(-1, -2);
-        lp.topMargin = dp(8);
-        card.addView(item, lp);
-    }
-
-    private Button button(String label) {
+    private Button modeButton(String label) {
         Button button = new Button(this);
         button.setText(label);
-        button.setTextColor(Color.rgb(8, 28, 23));
+        button.setTextSize(12);
+        button.setAllCaps(false);
+        button.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        button.setPadding(dp(9), 0, dp(9), 0);
+        styleModeButton(button, false);
+        return button;
+    }
+
+    private void styleModeButton(Button button, boolean selected) {
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(selected ? PURPLE_LIGHT : Color.rgb(249, 247, 250));
+        bg.setCornerRadius(dp(13));
+        bg.setStroke(dp(1), selected ? PURPLE : LINE);
+        button.setBackground(bg);
+        button.setTextColor(selected ? PURPLE : MUTED);
+        button.setAlpha(button.isEnabled() ? 1f : 0.42f);
+    }
+
+    private Button chipButton(String label, boolean selected) {
+        Button button = modeButton(label);
+        button.setTextSize(10);
+        button.setPadding(dp(11), 0, dp(11), 0);
+        styleModeButton(button, selected);
+        return button;
+    }
+
+    private Button primaryButton(String label) {
+        Button button = new Button(this);
+        button.setText(label);
+        button.setTextColor(Color.WHITE);
         button.setTextSize(13);
         button.setAllCaps(false);
         button.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        GradientDrawable bg = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+                new int[]{PURPLE, PINK});
+        bg.setCornerRadius(dp(14));
+        button.setBackground(bg);
+        return button;
+    }
+
+    private Button secondaryButton(String label) {
+        Button button = new Button(this);
+        button.setText(label);
+        button.setTextColor(PURPLE);
+        button.setTextSize(11);
+        button.setAllCaps(false);
         GradientDrawable bg = new GradientDrawable();
-        bg.setColor(COLOR_ACCENT);
+        bg.setColor(PURPLE_LIGHT);
         bg.setCornerRadius(dp(13));
         button.setBackground(bg);
         return button;
     }
 
-    private RadioButton radio(String label, int id) {
-        RadioButton button = new RadioButton(this);
-        button.setId(id);
-        button.setText(label);
-        button.setTextColor(COLOR_TEXT);
-        button.setTextSize(14);
-        button.setButtonTintList(android.content.res.ColorStateList.valueOf(COLOR_ACCENT));
-        button.setGravity(Gravity.CENTER_VERTICAL);
-        return button;
+    private GradientDrawable pill(int color, int radius, int stroke) {
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(color);
+        bg.setCornerRadius(radius);
+        if (stroke != Color.TRANSPARENT) bg.setStroke(dp(1), stroke);
+        return bg;
     }
 
     private TextView text(String value, int size, int color, boolean bold) {
@@ -667,7 +859,7 @@ public class MainActivity extends Activity {
 
     private LinearLayout.LayoutParams cardMargins() {
         LinearLayout.LayoutParams lp = params(-1, -2);
-        lp.topMargin = dp(16);
+        lp.topMargin = dp(15);
         return lp;
     }
 
@@ -675,10 +867,7 @@ public class MainActivity extends Activity {
         return new LinearLayout.LayoutParams(width, height);
     }
 
-    private int dp(float value) { return (int) (value * getResources().getDisplayMetrics().density + 0.5f); }
-
-    private int indexOf(String[] values, String value) {
-        for (int i = 0; i < values.length; i++) if (values[i].equals(value)) return i;
-        return 0;
+    private int dp(float value) {
+        return (int) (value * getResources().getDisplayMetrics().density + 0.5f);
     }
 }
