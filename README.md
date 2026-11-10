@@ -6,6 +6,8 @@
 
 ## Alpha UI and features
 
+- Redesigned device dashboard, dedicated left/right Controls screen, and bottom Settings sheet inspired by the supplied layout reference. Touch remapping and Control Lock remain preview-only until GM2 Pro commands are verified.
+
 - Light, card-based dashboard inspired by modern headphone companion apps, with original LenovoBuds branding and an ALPHA status label.
 - Bluetooth LE discovery, GATT service inspection, and best-effort standard battery-service reading (only where exposed).
 - Music / Gaming app-side mode selector.
