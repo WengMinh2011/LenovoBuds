@@ -3,6 +3,7 @@ package com.lenovobuds.app;
 import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.app.Dialog;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothGatt;
@@ -22,8 +23,12 @@ import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.graphics.Color;
+import android.graphics.Canvas;
+import android.graphics.Paint;
+import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.RippleDrawable;
 import android.os.Build;
 import android.os.Bundle;
@@ -31,10 +36,13 @@ import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
 import android.view.Gravity;
+import android.view.Window;
+import android.view.WindowManager;
 import android.view.View;
 import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.HorizontalScrollView;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.Switch;
@@ -54,15 +62,16 @@ public class MainActivity extends Activity {
     private static final UUID BATTERY_SERVICE = UUID.fromString("0000180f-0000-1000-8000-00805f9b34fb");
     private static final UUID BATTERY_LEVEL = UUID.fromString("00002a19-0000-1000-8000-00805f9b34fb");
 
-    private static final int BG = Color.rgb(247, 245, 249);
+    private static final int BG = Color.rgb(244, 248, 250);
     private static final int CARD = Color.WHITE;
-    private static final int TEXT = Color.rgb(39, 28, 48);
-    private static final int MUTED = Color.rgb(132, 123, 141);
-    private static final int PURPLE = Color.rgb(133, 63, 178);
-    private static final int PURPLE_LIGHT = Color.rgb(246, 235, 252);
-    private static final int PINK = Color.rgb(235, 104, 165);
-    private static final int LINE = Color.rgb(235, 229, 239);
+    private static final int TEXT = Color.rgb(31, 38, 43);
+    private static final int MUTED = Color.rgb(128, 139, 145);
+    private static final int PURPLE = Color.rgb(67, 165, 112);
+    private static final int PURPLE_LIGHT = Color.rgb(233, 246, 239);
+    private static final int PINK = Color.rgb(111, 190, 146);
+    private static final int LINE = Color.rgb(231, 237, 239);
     private static final int GREEN = Color.rgb(45, 153, 122);
+    private static final int CYAN = Color.rgb(43, 177, 204);
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Map<String, BluetoothDevice> devices = new LinkedHashMap<>();
@@ -94,6 +103,8 @@ public class MainActivity extends Activity {
     private Button ambientButton;
     private Button normalButton;
     private Button findDeviceButton;
+    private Switch gamingModeSwitch;
+    private String currentScreen = "home";
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
@@ -115,60 +126,358 @@ public class MainActivity extends Activity {
         scroll.setBackgroundColor(BG);
         page = new LinearLayout(this);
         page.setOrientation(LinearLayout.VERTICAL);
-        page.setPadding(dp(18), dp(18), dp(18), dp(34));
+        page.setPadding(dp(18), dp(12), dp(18), dp(30));
         scroll.addView(page);
         setContentView(scroll);
+        showHomeScreen();
+    }
 
+    private void resetPage(String screen) {
+        currentScreen = screen;
+        page.removeAllViews();
+        page.setPadding(dp(18), dp(12), dp(18), dp(30));
+        eqStatus = null; modeStatus = null; ancStatus = null;
+        profileChips = null; graphView = null; autoSwitch = null;
+        musicButton = null; gamingButton = null; ancButton = null;
+        ambientButton = null; normalButton = null; gamingModeSwitch = null;
+        findDeviceButton = null;
+    }
+
+    private void showHomeScreen() {
+        resetPage("home");
         buildHeader();
-        buildDeviceCard();
-        buildModeCard();
-        buildNoiseCard();
+        buildHomeHero();
+        buildHomeFeatures();
+        TextView foot = text("LenovoBuds ALPHA is an unofficial community project. GM2 Pro hardware controls remain previews until their Bluetooth commands are verified.", 10, MUTED, false);
+        foot.setLineSpacing(dp(3), 1f);
+        LinearLayout.LayoutParams lp = params(-1, -2);
+        lp.topMargin = dp(15);
+        page.addView(foot, lp);
+        refreshUi();
+    }
+
+    private void showEqualizerScreen() {
+        resetPage("sound");
+        buildSubpageHeader("Sound Effects");
         buildEqualizerCard();
         buildGameCard();
+        refreshUi();
+    }
 
-        TextView foot = text("LenovoBuds is an unofficial community project. ALPHA controls marked “not verified” are deliberately locked until the exact earbud hardware and Bluetooth command are confirmed.", 11, MUTED, false);
-        foot.setLineSpacing(dp(3), 1f);
-        LinearLayout.LayoutParams footLp = params(-1, -2);
-        footLp.topMargin = dp(18);
-        page.addView(foot, footLp);
+    private void showControlsScreen() {
+        resetPage("controls");
+        buildSubpageHeader("Controls");
+        buildControlsContent();
+    }
+
+    private void buildSubpageHeader(String title) {
+        LinearLayout header = new LinearLayout(this);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        Button back = iconButton("‹");
+        back.setOnClickListener(v -> showHomeScreen());
+        header.addView(back, new LinearLayout.LayoutParams(dp(42), dp(42)));
+        TextView heading = text(title, 19, TEXT, true);
+        heading.setGravity(Gravity.CENTER);
+        header.addView(heading, new LinearLayout.LayoutParams(0, dp(42), 1f));
+        Button settings = iconButton("⚙");
+        settings.setOnClickListener(v -> showSettingsSheet());
+        header.addView(settings, new LinearLayout.LayoutParams(dp(42), dp(42)));
+        page.addView(header);
     }
 
     private void buildHeader() {
         LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
         ImageView logo = new ImageView(this);
         logo.setImageResource(com.lenovobuds.app.R.drawable.lenovobuds_logo);
         logo.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        row.addView(logo, new LinearLayout.LayoutParams(dp(48), dp(48)));
-
+        row.addView(logo, new LinearLayout.LayoutParams(dp(38), dp(38)));
         LinearLayout names = new LinearLayout(this);
         names.setOrientation(LinearLayout.VERTICAL);
-        TextView name = text("LenovoBuds", 20, TEXT, true);
-        names.addView(name);
-        TextView sub = text("YOUR AUDIO, YOUR WAY", 9, MUTED, true);
+        names.addView(text("LenovoBuds", 17, TEXT, true));
+        TextView sub = text("THINKPLUS COMPANION", 8, MUTED, true);
         sub.setLetterSpacing(0.13f);
-        LinearLayout.LayoutParams subLp = params(-1, -2);
-        subLp.topMargin = dp(2);
-        names.addView(sub, subLp);
+        names.addView(sub);
         LinearLayout.LayoutParams namesLp = new LinearLayout.LayoutParams(0, -2, 1f);
-        namesLp.leftMargin = dp(10);
+        namesLp.leftMargin = dp(9);
         row.addView(names, namesLp);
-
-        TextView alpha = text("ALPHA 0.1.1", 10, PURPLE, true);
-        alpha.setPadding(dp(11), dp(7), dp(11), dp(7));
-        alpha.setBackground(pill(PURPLE_LIGHT, dp(18), Color.TRANSPARENT));
-        row.addView(alpha);
+        Button settings = iconButton("⚙");
+        settings.setOnClickListener(v -> showSettingsSheet());
+        row.addView(settings, new LinearLayout.LayoutParams(dp(42), dp(42)));
         page.addView(row);
+    }
 
-        TextView title = text("Your sound. Your setup.", 25, TEXT, true);
-        LinearLayout.LayoutParams titleLp = params(-1, -2);
-        titleLp.topMargin = dp(21);
-        page.addView(title, titleLp);
-        TextView intro = text("A simple companion dashboard for your thinkplus earbuds. Some controls are still experimental.", 13, MUTED, false);
+    private Button iconButton(String glyph) {
+        Button b = secondaryButton(glyph);
+        b.setTextSize(19);
+        b.setPadding(0, 0, 0, dp(2));
+        b.setBackground(pill(Color.WHITE, dp(14), Color.TRANSPARENT));
+        b.setTextColor(TEXT);
+        return b;
+    }
+
+    private void buildHomeHero() {
+        String oldDevice = deviceStatus == null ? "Not connected" : deviceStatus.getText().toString();
+        String oldModel = modelStatus == null ? "Target profile · GM2 Pro" : modelStatus.getText().toString();
+        String oldBattery = batteryStatus == null ? "L  —%          R  —%" : batteryStatus.getText().toString();
+
+        FrameLayout hero = new FrameLayout(this);
+        hero.setBackground(pill(Color.rgb(237, 245, 248), dp(25), Color.TRANSPARENT));
+        hero.addView(new EarbudsIllustrationView(this),
+                new FrameLayout.LayoutParams(-1, dp(196), Gravity.CENTER));
+        TextView alpha = text("ALPHA 0.1.3", 9, PURPLE, true);
+        alpha.setPadding(dp(10), dp(6), dp(10), dp(6));
+        alpha.setBackground(pill(Color.WHITE, dp(20), Color.TRANSPARENT));
+        FrameLayout.LayoutParams alphaLp = new FrameLayout.LayoutParams(-2, -2, Gravity.TOP | Gravity.LEFT);
+        alphaLp.setMargins(dp(13), dp(13), 0, 0);
+        hero.addView(alpha, alphaLp);
+        LinearLayout.LayoutParams heroLp = params(-1, dp(205));
+        heroLp.topMargin = dp(12);
+        page.addView(hero, heroLp);
+
+        TextView model = text("thinkplus GM2 Pro", 22, TEXT, true);
+        model.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams modelLp = params(-1, -2);
+        modelLp.topMargin = dp(11);
+        page.addView(model, modelLp);
+        deviceStatus = text(oldDevice, 11, MUTED, false);
+        deviceStatus.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams statusLp = params(-1, -2);
+        statusLp.topMargin = dp(4);
+        page.addView(deviceStatus, statusLp);
+        modelStatus = text(oldModel, 10, MUTED, false);
+        modelStatus.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams detailLp = params(-1, -2);
+        detailLp.topMargin = dp(3);
+        page.addView(modelStatus, detailLp);
+
+        batteryStatus = text(oldBattery, 12, TEXT, true);
+        batteryStatus.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams batteryLp = params(-1, dp(29));
+        batteryLp.topMargin = dp(8);
+        page.addView(batteryStatus, batteryLp);
+        TextView hint = text("Battery readings depend on what Android exposes to the app.", 9, MUTED, false);
+        hint.setGravity(Gravity.CENTER);
+        page.addView(hint);
+    }
+
+    private void buildHomeFeatures() {
+        LinearLayout features = card();
+        addFeatureRow(features, "≋", "Sound Effects", "Phone-side EQ · " + selectedProfile, "›", () -> showEqualizerScreen());
+        addDivider(features);
+        addFeatureRow(features, "☝", "Controls", "Left / right touch actions", "›", () -> showControlsScreen());
+        addDivider(features);
+
+        LinearLayout gameRow = new LinearLayout(this);
+        gameRow.setGravity(Gravity.CENTER_VERTICAL);
+        TextView tile = iconTile("◉");
+        gameRow.addView(tile, new LinearLayout.LayoutParams(dp(42), dp(42)));
+        LinearLayout labels = new LinearLayout(this);
+        labels.setOrientation(LinearLayout.VERTICAL);
+        labels.addView(text("Gaming Mode", 14, TEXT, true));
+        TextView detail = text("Phone EQ only · earbud command unverified", 10, MUTED, false);
+        LinearLayout.LayoutParams detailLp = params(-1, -2);
+        detailLp.topMargin = dp(3);
+        labels.addView(detail, detailLp);
+        LinearLayout.LayoutParams labelsLp = new LinearLayout.LayoutParams(0, -2, 1f);
+        labelsLp.leftMargin = dp(12);
+        gameRow.addView(labels, labelsLp);
+        gamingModeSwitch = new Switch(this);
+        gamingModeSwitch.setChecked(prefs.getBoolean("gaming_mode", false));
+        gamingModeSwitch.setOnCheckedChangeListener((button, checked) -> setListeningMode(checked));
+        gameRow.addView(gamingModeSwitch);
+        features.addView(gameRow, params(-1, dp(68)));
+        addDivider(features);
+        addFeatureRow(features, "▣", "Dual Connections", "Not verified for the GM2 Pro", "›", () -> showDualConnectionInfo());
+        page.addView(features, cardMargins());
+    }
+
+    private void addFeatureRow(LinearLayout parent, String glyph, String title, String subtitle, String trailing, Runnable action) {
+        LinearLayout row = new LinearLayout(this);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        TextView icon = iconTile(glyph);
+        row.addView(icon, new LinearLayout.LayoutParams(dp(42), dp(42)));
+        LinearLayout labels = new LinearLayout(this);
+        labels.setOrientation(LinearLayout.VERTICAL);
+        labels.addView(text(title, 14, TEXT, true));
+        TextView sub = text(subtitle, 10, MUTED, false);
+        LinearLayout.LayoutParams subLp = params(-1, -2);
+        subLp.topMargin = dp(3);
+        labels.addView(sub, subLp);
+        LinearLayout.LayoutParams labelsLp = new LinearLayout.LayoutParams(0, -2, 1f);
+        labelsLp.leftMargin = dp(12);
+        row.addView(labels, labelsLp);
+        TextView arrow = text(trailing, 25, MUTED, false);
+        arrow.setGravity(Gravity.CENTER);
+        row.addView(arrow, new LinearLayout.LayoutParams(dp(25), -2));
+        row.setBackground(new RippleDrawable(ColorStateList.valueOf(0x18000000),
+                pill(Color.WHITE, dp(12), Color.TRANSPARENT),
+                pill(Color.WHITE, dp(12), Color.TRANSPARENT)));
+        row.setClickable(true);
+        row.setFocusable(true);
+        row.setOnClickListener(v -> action.run());
+        parent.addView(row, params(-1, dp(68)));
+    }
+
+    private TextView iconTile(String glyph) {
+        TextView icon = text(glyph, 20, TEXT, true);
+        icon.setGravity(Gravity.CENTER);
+        icon.setBackground(pill(Color.rgb(242, 247, 248), dp(13), Color.TRANSPARENT));
+        return icon;
+    }
+
+    private void addDivider(LinearLayout parent) {
+        View line = new View(this);
+        line.setBackgroundColor(LINE);
+        LinearLayout.LayoutParams lp = params(-1, dp(1));
+        lp.leftMargin = dp(54);
+        parent.addView(line, lp);
+    }
+
+    private void showDualConnectionInfo() {
+        new AlertDialog.Builder(this)
+                .setTitle("Dual Connections")
+                .setMessage("LenovoBuds has not verified a dual-device connection command or connection-status API for the GM2 Pro. Pair and manage the earbuds through Android Bluetooth settings.")
+                .setPositiveButton("Got it", null).show();
+    }
+
+    private void buildControlsContent() {
+        TextView intro = text("Choose an earbud to view its touch gestures.", 12, MUTED, false);
         LinearLayout.LayoutParams introLp = params(-1, -2);
-        introLp.topMargin = dp(5);
+        introLp.topMargin = dp(8);
         page.addView(intro, introLp);
+
+        FrameLayout hero = new FrameLayout(this);
+        hero.setBackground(pill(Color.rgb(237, 245, 248), dp(24), Color.TRANSPARENT));
+        hero.addView(new EarbudsIllustrationView(this), new FrameLayout.LayoutParams(-1, dp(160), Gravity.CENTER));
+        LinearLayout.LayoutParams heroLp = params(-1, dp(165));
+        heroLp.topMargin = dp(14);
+        page.addView(hero, heroLp);
+
+        LinearLayout tabs = new LinearLayout(this);
+        tabs.setPadding(dp(4), dp(4), dp(4), dp(4));
+        tabs.setBackground(pill(Color.rgb(231, 237, 239), dp(26), Color.TRANSPARENT));
+        Button left = modeButton("Left"), right = modeButton("Right");
+        styleModeButton(left, true); styleModeButton(right, false);
+        left.setOnClickListener(v -> { styleModeButton(left, true); styleModeButton(right, false); });
+        right.setOnClickListener(v -> { styleModeButton(left, false); styleModeButton(right, true); });
+        tabs.addView(left, new LinearLayout.LayoutParams(0, dp(38), 1f));
+        tabs.addView(right, new LinearLayout.LayoutParams(0, dp(38), 1f));
+        LinearLayout.LayoutParams tabsLp = params(-1, dp(46));
+        tabsLp.topMargin = dp(14);
+        page.addView(tabs, tabsLp);
+
+        LinearLayout actions = card();
+        addTouchActionRow(actions, "Single Tap");
+        addDivider(actions);
+        addTouchActionRow(actions, "Double Tap");
+        addDivider(actions);
+        addTouchActionRow(actions, "Triple Tap");
+        addDivider(actions);
+        addTouchActionRow(actions, "Tap and Hold");
+        page.addView(actions, cardMargins());
+
+        TextView note = text("Touch mappings are not currently readable or configurable through a verified GM2 Pro app command. These rows are a preview, not working remapping controls.", 10, MUTED, false);
+        note.setLineSpacing(dp(3), 1f);
+        LinearLayout.LayoutParams noteLp = params(-1, -2);
+        noteLp.topMargin = dp(13);
+        page.addView(note, noteLp);
+    }
+
+    private void addTouchActionRow(LinearLayout parent, String title) {
+        LinearLayout row = new LinearLayout(this);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        TextView dot = text("•", 25, CYAN, true);
+        dot.setGravity(Gravity.CENTER);
+        row.addView(dot, new LinearLayout.LayoutParams(dp(38), -1));
+        LinearLayout labels = new LinearLayout(this);
+        labels.setOrientation(LinearLayout.VERTICAL);
+        labels.addView(text(title, 14, TEXT, true));
+        TextView subtitle = text("Not exposed by the app protocol", 10, MUTED, false);
+        LinearLayout.LayoutParams slp = params(-1, -2);
+        slp.topMargin = dp(3);
+        labels.addView(subtitle, slp);
+        row.addView(labels, new LinearLayout.LayoutParams(0, -2, 1f));
+        TextView arrow = text("›", 23, MUTED, false);
+        row.addView(arrow, new LinearLayout.LayoutParams(dp(25), -2));
+        row.setClickable(true);
+        row.setFocusable(true);
+        row.setBackground(new RippleDrawable(ColorStateList.valueOf(0x18000000),
+                pill(Color.WHITE, dp(10), Color.TRANSPARENT),
+                pill(Color.WHITE, dp(10), Color.TRANSPARENT)));
+        row.setOnClickListener(v -> new AlertDialog.Builder(this).setTitle(title)
+                .setMessage("Touch-action remapping is not yet supported for the thinkplus GM2 Pro. Selecting this row will not send a command to the earbuds.")
+                .setPositiveButton("Got it", null).show());
+        parent.addView(row, params(-1, dp(68)));
+    }
+
+    private void showSettingsSheet() {
+        Dialog dialog = new Dialog(this);
+        LinearLayout sheet = new LinearLayout(this);
+        sheet.setOrientation(LinearLayout.VERTICAL);
+        sheet.setPadding(dp(22), dp(17), dp(22), dp(24));
+        sheet.setBackground(pill(Color.WHITE, dp(24), Color.TRANSPARENT));
+
+        View handle = new View(this);
+        handle.setBackground(pill(Color.rgb(220, 225, 228), dp(6), Color.TRANSPARENT));
+        LinearLayout.LayoutParams hlp = new LinearLayout.LayoutParams(dp(38), dp(5));
+        hlp.gravity = Gravity.CENTER_HORIZONTAL;
+        sheet.addView(handle, hlp);
+
+        LinearLayout titleRow = new LinearLayout(this);
+        titleRow.setGravity(Gravity.CENTER_VERTICAL);
+        titleRow.addView(text("Settings", 18, TEXT, true), new LinearLayout.LayoutParams(0, dp(48), 1f));
+        Button close = iconButton("×");
+        close.setOnClickListener(v -> dialog.dismiss());
+        titleRow.addView(close, new LinearLayout.LayoutParams(dp(40), dp(40)));
+        LinearLayout.LayoutParams tlp = params(-1, dp(52));
+        tlp.topMargin = dp(9);
+        sheet.addView(titleRow, tlp);
+
+        LinearLayout lockRow = new LinearLayout(this);
+        lockRow.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout labels = new LinearLayout(this);
+        labels.setOrientation(LinearLayout.VERTICAL);
+        labels.addView(text("Control Lock", 14, TEXT, true));
+        TextView detail = text("Temporarily disables touch controls and touch sounds on the headset.", 10, MUTED, false);
+        detail.setLineSpacing(dp(2), 1f);
+        LinearLayout.LayoutParams dlp = params(-1, -2);
+        dlp.topMargin = dp(4);
+        labels.addView(detail, dlp);
+        lockRow.addView(labels, new LinearLayout.LayoutParams(0, -2, 1f));
+        Switch lockSwitch = new Switch(this);
+        lockSwitch.setChecked(false);
+        lockSwitch.setEnabled(false);
+        lockRow.addView(lockSwitch);
+        LinearLayout.LayoutParams rlp = params(-1, -2);
+        rlp.topMargin = dp(17);
+        sheet.addView(lockRow, rlp);
+
+        TextView unavailable = text("Unavailable for GM2 Pro · no verified control-lock command", 10, MUTED, false);
+        LinearLayout.LayoutParams ulp = params(-1, -2);
+        ulp.topMargin = dp(9);
+        sheet.addView(unavailable, ulp);
+
+        Button done = primaryButton("Done");
+        done.setOnClickListener(v -> dialog.dismiss());
+        LinearLayout.LayoutParams doneLp = params(-1, dp(46));
+        doneLp.topMargin = dp(20);
+        sheet.addView(done, doneLp);
+
+        dialog.setContentView(sheet);
+        dialog.show();
+        Window window = dialog.getWindow();
+        if (window != null) {
+            window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+            WindowManager.LayoutParams lp = window.getAttributes();
+            lp.width = WindowManager.LayoutParams.MATCH_PARENT;
+            lp.height = WindowManager.LayoutParams.WRAP_CONTENT;
+            lp.gravity = Gravity.BOTTOM;
+            lp.dimAmount = 0.48f;
+            window.setAttributes(lp);
+            window.setLayout(WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.WRAP_CONTENT);
+        }
     }
 
     private void buildDeviceCard() {
@@ -453,12 +762,12 @@ public class MainActivity extends Activity {
         if (gaming) {
             if (selectedProfile.equals(ProfileCatalog.MUSIC)) selectProfile(ProfileCatalog.FPS);
             prefs.edit().putBoolean("gaming_mode", true).apply();
-            eqStatus.setText(AudioProfileEngine.applyGains(selectedProfile, currentGains));
-            modeStatus.setText("Gaming EQ selected · earbud low-latency command not yet verified");
+            if (eqStatus != null) eqStatus.setText(AudioProfileEngine.applyGains(selectedProfile, currentGains));
+            if (modeStatus != null) modeStatus.setText("Gaming EQ selected · earbud low-latency command not yet verified");
         } else {
             prefs.edit().putBoolean("gaming_mode", false).apply();
             selectProfile(ProfileCatalog.MUSIC);
-            modeStatus.setText("Music EQ selected · phone-side audio profile");
+            if (modeStatus != null) modeStatus.setText("Music EQ selected · phone-side audio profile");
         }
         refreshModeButtons();
     }
@@ -467,12 +776,17 @@ public class MainActivity extends Activity {
         boolean gaming = prefs.getBoolean("gaming_mode", false);
         if (musicButton != null) styleModeButton(musicButton, !gaming);
         if (gamingButton != null) styleModeButton(gamingButton, gaming);
+        if (gamingModeSwitch != null) {
+            gamingModeSwitch.setOnCheckedChangeListener(null);
+            gamingModeSwitch.setChecked(gaming);
+            gamingModeSwitch.setOnCheckedChangeListener((button, checked) -> setListeningMode(checked));
+        }
     }
 
     private void updateNoiseUi() {
         String value = prefs.getString("noise_profile", "Off");
-        styleModeButton(normalButton, "Off".equals(value));
-        ancStatus.setText("ANC / ambient controls remain locked until supported by this exact earbud revision and a real control command is verified.");
+        if (normalButton != null) styleModeButton(normalButton, "Off".equals(value));
+        if (ancStatus != null) ancStatus.setText("ANC / ambient controls remain locked until supported by this exact earbud revision and a real control command is verified.");
     }
 
     private void showNoiseUnavailable(String feature) {
@@ -760,20 +1074,20 @@ public class MainActivity extends Activity {
                 try { gatt.disconnect(); gatt.close(); } catch (Throwable ignored) {}
                 gatt = null;
             }
-            deviceStatus.setText("Paired · Android manages the Bluetooth audio connection");
-            modelStatus.setText(detectModel(name) + " · device identified; control protocol not verified");
-            batteryStatus.setText("Earbud battery · not exposed to LenovoBuds yet");
-            ancStatus.setText("ANC / Ambient controls remain locked until a GM2 Pro control protocol is verified.");
+            if (deviceStatus != null) deviceStatus.setText("Paired · Android manages the Bluetooth audio connection");
+            if (modelStatus != null) modelStatus.setText(detectModel(name) + " · device identified; control protocol not verified");
+            if (batteryStatus != null) batteryStatus.setText("L  —%          R  —%");
+            if (ancStatus != null) ancStatus.setText("ANC / Ambient controls remain locked until a GM2 Pro control protocol is verified.");
             Toast.makeText(this, "GM2 Pro detected. Android manages its audio connection; earbud controls are not verified yet.", Toast.LENGTH_LONG).show();
             return;
         }
         try {
             if (gatt != null) { gatt.disconnect(); gatt.close(); gatt = null; }
-            deviceStatus.setText("Opening BLE control link to " + name + "…");
-            modelStatus.setText(detectModel(name) + " · checking BLE services");
+            if (deviceStatus != null) deviceStatus.setText("Opening BLE control link to " + name + "…");
+            if (modelStatus != null) modelStatus.setText(detectModel(name) + " · checking BLE services");
             gatt = device.connectGatt(this, false, gattCallback, BluetoothDevice.TRANSPORT_LE);
         } catch (Throwable error) {
-            deviceStatus.setText("Could not open a BLE control link");
+            if (deviceStatus != null) deviceStatus.setText("Could not open a BLE control link");
             Toast.makeText(this, "This device may use classic Bluetooth only", Toast.LENGTH_LONG).show();
         }
     }
@@ -782,15 +1096,15 @@ public class MainActivity extends Activity {
         @Override public void onConnectionStateChange(BluetoothGatt bluetoothGatt, int status, int newState) {
             runOnUiThread(() -> {
                 if (newState == BluetoothProfile.STATE_CONNECTED) {
-                    deviceStatus.setText("BLE connected · discovering services…");
-                    modelStatus.setText(detectModel(safeDeviceName(bluetoothGatt.getDevice())) + " · checking services");
+                    if (deviceStatus != null) deviceStatus.setText("BLE connected · discovering services…");
+                    if (modelStatus != null) modelStatus.setText(detectModel(safeDeviceName(bluetoothGatt.getDevice())) + " · checking services");
                     try { bluetoothGatt.discoverServices(); } catch (Throwable ignored) {}
                 } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
-                    deviceStatus.setText("Bluetooth audio may still be connected; BLE link disconnected");
+                    if (deviceStatus != null) deviceStatus.setText("Bluetooth audio may still be connected; BLE link disconnected");
                     if (gatt == bluetoothGatt) gatt = null;
                     try { bluetoothGatt.close(); } catch (Throwable ignored) {}
                 } else if (status != BluetoothGatt.GATT_SUCCESS) {
-                    deviceStatus.setText("BLE connection error · " + status);
+                    if (deviceStatus != null) deviceStatus.setText("BLE connection error · " + status);
                 }
             });
         }
@@ -800,8 +1114,8 @@ public class MainActivity extends Activity {
             BluetoothGattService battery = bluetoothGatt.getService(BATTERY_SERVICE);
             BluetoothGattCharacteristic level = battery == null ? null : battery.getCharacteristic(BATTERY_LEVEL);
             runOnUiThread(() -> {
-                deviceStatus.setText("BLE link connected");
-                if (level == null) batteryStatus.setText("L —%     R —%     CASE —%  ·  service not exposed");
+                if (deviceStatus != null) deviceStatus.setText("BLE link connected");
+                if (level == null && batteryStatus != null) batteryStatus.setText("L  —%          R  —%");
             });
             if (level != null) {
                 try { bluetoothGatt.readCharacteristic(level); } catch (Throwable ignored) {}
@@ -820,7 +1134,7 @@ public class MainActivity extends Activity {
     private void updateBatteryRead(BluetoothGattCharacteristic characteristic, byte[] value, int status) {
         if (BATTERY_LEVEL.equals(characteristic.getUuid()) && status == BluetoothGatt.GATT_SUCCESS && value != null && value.length > 0) {
             int percent = value[0] & 0xff;
-            runOnUiThread(() -> batteryStatus.setText("L/R —%     BATTERY " + percent + "%     CASE —%"));
+            runOnUiThread(() -> { if (batteryStatus != null) batteryStatus.setText("BATTERY " + percent + "% · BLE service"); });
         }
     }
 
@@ -881,6 +1195,56 @@ public class MainActivity extends Activity {
         }
         AudioProfileEngine.release();
         super.onDestroy();
+    }
+
+    private static class EarbudsIllustrationView extends View {
+        private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final RectF shape = new RectF();
+
+        EarbudsIllustrationView(Activity activity) {
+            super(activity);
+            setLayerType(View.LAYER_TYPE_SOFTWARE, null);
+        }
+
+        @Override protected void onDraw(Canvas canvas) {
+            super.onDraw(canvas);
+            float cx = getWidth() / 2f, cy = getHeight() / 2f;
+            float radius = Math.min(getWidth(), getHeight()) * 0.37f;
+            paint.setStyle(Paint.Style.FILL);
+            paint.setColor(Color.rgb(229, 240, 244));
+            canvas.drawCircle(cx, cy, radius, paint);
+            drawEarbud(canvas, cx - radius * 0.43f, cy, true, radius);
+            drawEarbud(canvas, cx + radius * 0.43f, cy, false, radius);
+        }
+
+        private void drawEarbud(Canvas canvas, float cx, float cy, boolean left, float radius) {
+            canvas.save();
+            canvas.rotate(left ? -28f : 28f, cx, cy);
+            float u = radius / 65f;
+            paint.setStyle(Paint.Style.STROKE);
+            paint.setStrokeCap(Paint.Cap.ROUND);
+            paint.setStrokeWidth(7f * u);
+            paint.setColor(Color.rgb(34, 42, 47));
+            shape.set(cx - 25f*u, cy - 45f*u, cx + 37f*u, cy + 49f*u);
+            canvas.drawArc(shape, left ? 205f : -25f, 225f, false, paint);
+
+            paint.setStyle(Paint.Style.FILL);
+            paint.setColor(Color.WHITE);
+            shape.set(cx - 25f*u, cy - 7f*u, cx + 27f*u, cy + 29f*u);
+            canvas.drawRoundRect(shape, 16f*u, 16f*u, paint);
+            paint.setStyle(Paint.Style.STROKE);
+            paint.setStrokeWidth(1.4f*u);
+            paint.setColor(Color.rgb(195, 205, 209));
+            canvas.drawRoundRect(shape, 16f*u, 16f*u, paint);
+
+            paint.setStyle(Paint.Style.FILL);
+            paint.setColor(Color.rgb(52, 64, 69));
+            shape.set(cx - 9f*u, cy + 2f*u, cx + 7f*u, cy + 9f*u);
+            canvas.drawRoundRect(shape, 4f*u, 4f*u, paint);
+            paint.setColor(Color.rgb(43, 177, 204));
+            canvas.drawCircle(cx + 17f*u, cy + 11f*u, 2.1f*u, paint);
+            canvas.restore();
+        }
     }
 
     private LinearLayout card() {
