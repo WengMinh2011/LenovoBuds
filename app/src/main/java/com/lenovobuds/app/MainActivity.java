@@ -113,7 +113,7 @@ public class MainActivity extends Activity {
         super.onCreate(state);
         getWindow().setStatusBarColor(BG);
         getWindow().setNavigationBarColor(BG);
-        getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
+        getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
         prefs = getSharedPreferences("lenovo_buds", MODE_PRIVATE);
         bluetoothManager = (BluetoothManager) getSystemService(BLUETOOTH_SERVICE);
         if (bluetoothManager != null) bluetoothAdapter = bluetoothManager.getAdapter();
@@ -131,7 +131,7 @@ public class MainActivity extends Activity {
         page.setOrientation(LinearLayout.VERTICAL);
         page.setPadding(dp(18), dp(12), dp(18), dp(30));
         scroll.addView(page);
-        scroll.setClipToPadding(false);
+        scroll.setClipToPadding(true);
         scroll.setOnApplyWindowInsetsListener((view, insets) -> {
             int topInset;
             int bottomInset;
