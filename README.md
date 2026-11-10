@@ -38,6 +38,10 @@ References:
 - [Another GM2 Pro manual listing ANC absent](https://manuals.plus/ae/3256811614376757)
 - [LE258 manual: gaming low latency and ENC](https://manuals.plus/ae/3256811711037133)
 
+## GM2 Pro Game/Music protocol investigation
+
+A controlled Bluetooth HCI snoop capture is needed before implementing a hardware mode command. See [the capture and analysis procedure](docs/gm2-pro-game-mode-capture.md). Do not send guessed GATT data to the earbuds.
+
 ## Why controls need protocol research
 
 A phone app can control an earbud feature only if the earbuds expose a supported Bluetooth control path (for example, a documented BLE GATT characteristic or a vendor-specific Bluetooth command). A feature that is switched entirely inside the earbuds by a touch gesture may not be remotely controllable from Android.
