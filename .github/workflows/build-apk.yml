@@ -2,7 +2,7 @@ name: Build LenovoBuds ALPHA APK
 
 on:
   push:
-    branches: [ main, master, 'fix/gm2-pro-discovery-ui', 'fix/crash-and-responsive-ui', 'release/v0.1.1-alpha-clean-ui', 'fix/find-button-diagnostics-v0.1.3-alpha', 'ui/soundcore-style-layout-v0.1.3-alpha' ]
+    branches: [ main, master, 'fix/gm2-pro-discovery-ui', 'fix/crash-and-responsive-ui', 'release/v0.1.1-alpha-clean-ui', 'fix/find-button-diagnostics-v0.1.2-alpha', 'ui/soundcore-style-layout-v0.1.3-alpha' ]
   workflow_dispatch:
 
 permissions:
