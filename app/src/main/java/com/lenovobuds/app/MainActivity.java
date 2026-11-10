@@ -315,6 +315,7 @@ public class MainActivity extends Activity {
         gameRow.addView(gamingModeSwitch);
         features.addView(gameRow, params(-1, dp(68)));
         addDivider(features);
+        addFeatureRow(features, "⌁", "Bluetooth Diagnostics", "A2DP connection + event log", "›", () -> startActivity(new Intent(this, BluetoothDiagnosticsActivity.class)));
         addFeatureRow(features, "▣", "Dual Connections", "Not verified for the GM2 Pro", "›", () -> showDualConnectionInfo());
         page.addView(features, cardMargins());
     }
