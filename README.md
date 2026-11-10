@@ -1,12 +1,15 @@
 # LenovoBuds
 
-**LenovoBuds ALPHA 0.1.3** is an unofficial Android companion-app research project for Lenovo/thinkplus earbuds, beginning with the GM2 Pro. The LE258 is a secondary research target. It is not an official Lenovo app.
+**LenovoBuds ALPHA 0.1.4** is an unofficial Android companion-app research project for Lenovo/thinkplus earbuds, beginning with the GM2 Pro. The LE258 is a secondary research target. It is not an official Lenovo app.
 
 ![LenovoBuds logo](app/src/main/res/drawable-nodpi/lenovobuds_logo.png)
 
 ## Alpha UI and features
 
-- Redesigned device dashboard, dedicated left/right Controls screen, and bottom Settings sheet inspired by the supplied layout reference. Touch remapping and Control Lock remain preview-only until GM2 Pro commands are verified.
+- Redesigned device dashboard, dedicated left/right Controls screen, and bottom Settings sheet inspired by the supplied layout reference.
+- System-bar insets are applied so the Android status bar and app header do not overlap on Android 15 edge-to-edge displays.
+- Left/right gesture preferences can be edited and saved locally in the app. These are personal notes only; they do not remap GM2 Pro touch controls.
+- App Control Lock can lock those local preferences inside LenovoBuds; it does not disable the headset's touch controls.
 
 - Light, card-based dashboard inspired by modern headphone companion apps, with original LenovoBuds branding and an ALPHA status label.
 - Bluetooth LE discovery, GATT service inspection, and best-effort standard battery-service reading (only where exposed).
@@ -45,7 +48,7 @@ For real GM2 Pro support, the next step is a short, controlled Bluetooth HCI sno
 
 1. Open the repository's Actions tab.
 2. Select the latest successful Build LenovoBuds ALPHA APK workflow run.
-3. Download the versioned artifact, for example `LenovoBuds-v0.1.3-alpha-build-123.zip`.
+3. Download the versioned artifact, for example `LenovoBuds-v0.1.4-alpha-build-123.zip`.
 4. Extract and install the APK inside. Its filename includes the app version and build number, not the generic `app-debug.apk` name.
 
 The internal Android Gradle output is still named `app-debug.apk`; the workflow copies it to a versioned filename before uploading it.
