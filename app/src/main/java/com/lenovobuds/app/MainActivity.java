@@ -16,6 +16,7 @@ import android.bluetooth.le.ScanCallback;
 import android.bluetooth.le.ScanResult;
 import android.bluetooth.le.ScanSettings;
 import android.content.Intent;
+import android.content.res.ColorStateList;
 import android.content.SharedPreferences;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
@@ -23,6 +24,7 @@ import android.content.pm.ResolveInfo;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.RippleDrawable;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -91,6 +93,7 @@ public class MainActivity extends Activity {
     private Button ancButton;
     private Button ambientButton;
     private Button normalButton;
+    private Button findDeviceButton;
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
@@ -212,11 +215,11 @@ public class MainActivity extends Activity {
         batteryRow.addView(batteryLabel, batteryLabelLp);
         card.addView(batteryRow);
 
-        Button connect = primaryButton("Find paired earbuds");
-        connect.setOnClickListener(v -> beginScan());
+        findDeviceButton = primaryButton("Find paired earbuds");
+        findDeviceButton.setOnClickListener(v -> onFindDeviceClicked());
         LinearLayout.LayoutParams connectLp = params(-1, dp(47));
         connectLp.topMargin = dp(15);
-        card.addView(connect, connectLp);
+        card.addView(findDeviceButton, connectLp);
         TextView note = text("First pair your earbuds in your phone's Bluetooth settings. LenovoBuds can identify a paired device; this does not guarantee that its private controls are supported.", 11, MUTED, false);
         note.setLineSpacing(dp(2), 1f);
         LinearLayout.LayoutParams noteLp = params(-1, -2);
@@ -558,27 +561,72 @@ public class MainActivity extends Activity {
                 }).setNegativeButton("Close", null).show();
     }
 
+    private void onFindDeviceClicked() {
+        if (findDeviceButton == null || !findDeviceButton.isEnabled()) return;
+        deviceStatus.setText("Checking paired Bluetooth devices…");
+        setFindButtonState("Checking Bluetooth…", false);
+        try {
+            beginScan();
+        } catch (SecurityException error) {
+            pendingBluetoothScan = false;
+            deviceStatus.setText("Bluetooth access was denied by Android.");
+            setFindButtonState("Find paired earbuds", true);
+            Toast.makeText(this, "Allow Nearby devices permission for LenovoBuds in Settings.", Toast.LENGTH_LONG).show();
+        } catch (Throwable error) {
+            pendingBluetoothScan = false;
+            deviceStatus.setText("Discovery failed: " + error.getClass().getSimpleName());
+            setFindButtonState("Find paired earbuds", true);
+            Toast.makeText(this, "Could not check paired devices. See the device status above.", Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void setFindButtonState(String label, boolean enabled) {
+        if (findDeviceButton == null) return;
+        findDeviceButton.setText(label);
+        findDeviceButton.setEnabled(enabled);
+        findDeviceButton.setAlpha(enabled ? 1f : 0.72f);
+    }
+
     private void beginScan() {
         if (!hasBluetoothPermissions()) {
             pendingBluetoothScan = true;
-            requestBluetoothPermissions();
+            deviceStatus.setText("Waiting for Android Nearby devices permission…");
+            setFindButtonState("Waiting for permission…", false);
+            try {
+                requestBluetoothPermissions();
+            } catch (Throwable error) {
+                pendingBluetoothScan = false;
+                deviceStatus.setText("Could not request Bluetooth permission.");
+                setFindButtonState("Find paired earbuds", true);
+                Toast.makeText(this, "Open LenovoBuds app settings and allow Nearby devices.", Toast.LENGTH_LONG).show();
+            }
             return;
         }
         if (bluetoothAdapter == null) {
-            Toast.makeText(this, "This phone has no Bluetooth adapter", Toast.LENGTH_LONG).show();
+            deviceStatus.setText("This phone does not expose a Bluetooth adapter.");
+            setFindButtonState("Find paired earbuds", true);
+            Toast.makeText(this, "Bluetooth is unavailable on this phone.", Toast.LENGTH_LONG).show();
             return;
         }
         if (!bluetoothAdapter.isEnabled()) {
-            try { startActivity(new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)); }
-            catch (Throwable ignored) { Toast.makeText(this, "Enable Bluetooth in Settings", Toast.LENGTH_SHORT).show(); }
+            deviceStatus.setText("Bluetooth is off. Turn it on, then tap Find paired earbuds.");
+            setFindButtonState("Find paired earbuds", true);
+            try {
+                startActivity(new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE));
+            } catch (Throwable error) {
+                Toast.makeText(this, "Enable Bluetooth in Settings, then try again.", Toast.LENGTH_SHORT).show();
+            }
             return;
         }
 
         devices.clear();
-        addPairedDevices();
+        if (!addPairedDevices()) {
+            setFindButtonState("Find paired earbuds", true);
+            return;
+        }
 
-        // GM2 Pro appears as a paired Bluetooth audio endpoint. It must not be
-        // treated as a BLE peripheral or forced through connectGatt().
+        // GM2 Pro is normally a classic Bluetooth audio endpoint. Check Android's
+        // paired-device list before attempting BLE discovery.
         boolean hasLenovoPair = false;
         for (BluetoothDevice device : devices.values()) {
             String name = safeDeviceName(device).toUpperCase(Locale.ROOT);
@@ -594,6 +642,7 @@ public class MainActivity extends Activity {
             return;
         }
 
+        deviceStatus.setText("No paired devices found. Checking for BLE advertisements…");
         bleScanner = bluetoothAdapter.getBluetoothLeScanner();
         if (bleScanner == null) {
             showDevicePicker("No paired device was found and BLE scanning is unavailable. Pair your earbuds in Android Bluetooth settings first.");
@@ -610,31 +659,46 @@ public class MainActivity extends Activity {
             }
             @Override public void onScanFailed(int errorCode) {
                 scanning = false;
-                runOnUiThread(() -> showDevicePicker("BLE scan failed (" + errorCode + "). Pair the earbuds in Android Bluetooth settings first."));
+                runOnUiThread(() -> {
+                    setFindButtonState("Find paired earbuds", true);
+                    showDevicePicker("BLE scan failed (" + errorCode + "). Pair the earbuds in Android Bluetooth settings first.");
+                });
             }
         };
         try {
             ScanSettings settings = new ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build();
             bleScanner.startScan(null, settings, scanCallback);
             scanning = true;
-            deviceStatus.setText("Looking for BLE control services…");
+            deviceStatus.setText("Scanning for BLE devices…");
+            setFindButtonState("Scanning…", false);
             handler.postDelayed(() -> {
                 stopScan();
-                showDevicePicker("No paired Lenovo device was found. Select a device from the list if available.");
+                setFindButtonState("Find paired earbuds", true);
+                showDevicePicker("No paired Lenovo device was found. The GM2 Pro may not advertise as a BLE device.");
             }, 8000L);
         } catch (SecurityException error) {
-            Toast.makeText(this, "Bluetooth permission was not granted", Toast.LENGTH_LONG).show();
+            deviceStatus.setText("Android denied Bluetooth scanning permission.");
+            setFindButtonState("Find paired earbuds", true);
+            Toast.makeText(this, "Bluetooth permission was not granted.", Toast.LENGTH_LONG).show();
         } catch (Throwable error) {
+            setFindButtonState("Find paired earbuds", true);
             showDevicePicker("Could not start BLE scan. Pair the earbuds in Android Bluetooth settings first.");
         }
     }
 
-    private void addPairedDevices() {
+    private boolean addPairedDevices() {
         try {
-            if (bluetoothAdapter != null)
-                for (BluetoothDevice device : bluetoothAdapter.getBondedDevices())
+            if (bluetoothAdapter != null) {
+                for (BluetoothDevice device : bluetoothAdapter.getBondedDevices()) {
                     devices.put(device.getAddress(), device);
-        } catch (SecurityException ignored) {}
+                }
+            }
+            return true;
+        } catch (SecurityException error) {
+            deviceStatus.setText("Android blocked access to paired devices. Check Nearby devices permission.");
+            Toast.makeText(this, "LenovoBuds needs Nearby devices permission to list paired earbuds.", Toast.LENGTH_LONG).show();
+            return false;
+        }
     }
 
     private void stopScan() {
@@ -645,7 +709,8 @@ public class MainActivity extends Activity {
     }
 
     private void showDevicePicker(String message) {
-        addPairedDevices();
+        setFindButtonState("Find paired earbuds", true);
+        if (!addPairedDevices()) return;
         if (devices.isEmpty()) {
             deviceStatus.setText("No paired devices found");
             new AlertDialog.Builder(this).setTitle("No paired earbuds found")
@@ -788,7 +853,11 @@ public class MainActivity extends Activity {
         if (requestCode == REQ_BLUETOOTH && pendingBluetoothScan) {
             pendingBluetoothScan = false;
             if (hasBluetoothPermissions()) beginScan();
-            else Toast.makeText(this, "Bluetooth permissions are required to scan", Toast.LENGTH_LONG).show();
+            else {
+                deviceStatus.setText("Bluetooth permission denied. Allow Nearby devices in App info.");
+                setFindButtonState("Find paired earbuds", true);
+                Toast.makeText(this, "Allow Nearby devices permission for LenovoBuds.", Toast.LENGTH_LONG).show();
+            }
         } else if (requestCode == REQ_NOTIFICATIONS) {
             if (GameUtils.hasUsageAccess(this) && prefs.getBoolean("auto_game_mode", false)) startAutoService();
         }
@@ -891,7 +960,11 @@ public class MainActivity extends Activity {
         GradientDrawable bg = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
                 new int[]{PURPLE, PINK});
         bg.setCornerRadius(dp(14));
-        button.setBackground(bg);
+        button.setBackground(new RippleDrawable(
+                ColorStateList.valueOf(0x55FFFFFF),
+                bg,
+                pill(Color.WHITE, dp(14), Color.TRANSPARENT)));
+        button.setStateListAnimator(null);
         return button;
     }
 
