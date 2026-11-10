@@ -2,7 +2,7 @@ name: Build LenovoBuds ALPHA APK
 
 on:
   push:
-    branches: [ main, master, 'fix/gm2-pro-discovery-ui', 'fix/crash-and-responsive-ui', 'release/v0.1.1-alpha-clean-ui' ]
+    branches: [ main, master, 'fix/gm2-pro-discovery-ui', 'fix/crash-and-responsive-ui', 'release/v0.1.2-alpha-clean-ui', 'fix/find-button-diagnostics-v0.1.2-alpha' ]
   workflow_dispatch:
 
 permissions:
@@ -39,13 +39,13 @@ jobs:
         run: gradle --no-daemon assembleDebug
 
       - name: Rename APK with version
-        run: cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/LenovoBuds-v0.1.1-alpha-build-${GITHUB_RUN_NUMBER}.apk
+        run: cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/LenovoBuds-v0.1.2-alpha-build-${GITHUB_RUN_NUMBER}.apk
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: LenovoBuds-v0.1.1-alpha-build-${{ github.run_number }}
-          path: app/build/outputs/apk/debug/LenovoBuds-v0.1.1-alpha-build-${{ github.run_number }}.apk
+          name: LenovoBuds-v0.1.2-alpha-build-${{ github.run_number }}
+          path: app/build/outputs/apk/debug/LenovoBuds-v0.1.2-alpha-build-${{ github.run_number }}.apk
           if-no-files-found: error
           retention-days: 14
 
@@ -54,5 +54,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          TAG="v0.1.1-alpha.${GITHUB_RUN_NUMBER}"
-          gh release create "$TAG" "app/build/outputs/apk/debug/LenovoBuds-v0.1.1-alpha-build-${GITHUB_RUN_NUMBER}.apk#LenovoBuds-v0.1.1-alpha-build-${GITHUB_RUN_NUMBER}.apk" --title "LenovoBuds ALPHA 0.1.1 (build ${GITHUB_RUN_NUMBER})" --notes "Experimental LenovoBuds Android build. This ALPHA contains an editable phone-side EQ and game profiles. GM2 Pro/LE258 earbud Game/Music, ANC and Ambient commands are not verified and are not claimed to work." --prerelease --target "$GITHUB_SHA"
+          TAG="v0.1.2-alpha.${GITHUB_RUN_NUMBER}"
+          gh release create "$TAG" "app/build/outputs/apk/debug/LenovoBuds-v0.1.2-alpha-build-${GITHUB_RUN_NUMBER}.apk#LenovoBuds-v0.1.2-alpha-build-${GITHUB_RUN_NUMBER}.apk" --title "LenovoBuds ALPHA 0.1.2 (build ${GITHUB_RUN_NUMBER})" --notes "Experimental LenovoBuds Android build. This ALPHA contains an editable phone-side EQ and game profiles. GM2 Pro/LE258 earbud Game/Music, ANC and Ambient commands are not verified and are not claimed to work." --prerelease --target "$GITHUB_SHA"
