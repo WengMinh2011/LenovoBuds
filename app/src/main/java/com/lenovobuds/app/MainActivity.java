@@ -201,6 +201,12 @@ public class MainActivity extends Activity {
         LinearLayout.LayoutParams namesLp = new LinearLayout.LayoutParams(0, -2, 1f);
         namesLp.leftMargin = dp(9);
         row.addView(names, namesLp);
+        findDeviceButton = iconButton("⌕");
+        findDeviceButton.setContentDescription("Find paired earbuds");
+        findDeviceButton.setOnClickListener(v -> onFindDeviceClicked());
+        LinearLayout.LayoutParams findLp = new LinearLayout.LayoutParams(dp(42), dp(42));
+        findLp.rightMargin = dp(7);
+        row.addView(findDeviceButton, findLp);
         Button settings = iconButton("⚙");
         settings.setOnClickListener(v -> showSettingsSheet());
         row.addView(settings, new LinearLayout.LayoutParams(dp(42), dp(42)));
