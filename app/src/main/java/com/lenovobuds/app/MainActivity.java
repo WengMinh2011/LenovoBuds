@@ -39,6 +39,7 @@ import android.view.Gravity;
 import android.view.Window;
 import android.view.WindowManager;
 import android.view.View;
+import android.view.WindowInsets;
 import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.HorizontalScrollView;
@@ -104,6 +105,8 @@ public class MainActivity extends Activity {
     private Button normalButton;
     private Button findDeviceButton;
     private Switch gamingModeSwitch;
+    private EarbudsIllustrationView controlsIllustration;
+    private String selectedEarbudSide = "Left";
     private String currentScreen = "home";
 
     @Override protected void onCreate(Bundle state) {
@@ -128,6 +131,23 @@ public class MainActivity extends Activity {
         page.setOrientation(LinearLayout.VERTICAL);
         page.setPadding(dp(18), dp(12), dp(18), dp(30));
         scroll.addView(page);
+        scroll.setClipToPadding(false);
+        scroll.setOnApplyWindowInsetsListener((view, insets) -> {
+            int topInset;
+            int bottomInset;
+            if (Build.VERSION.SDK_INT >= 30) {
+                android.graphics.Insets bars = insets.getInsets(
+                        WindowInsets.Type.statusBars() | WindowInsets.Type.navigationBars()
+                                | WindowInsets.Type.displayCutout());
+                topInset = bars.top;
+                bottomInset = bars.bottom;
+            } else {
+                topInset = insets.getSystemWindowInsetTop();
+                bottomInset = insets.getSystemWindowInsetBottom();
+            }
+            view.setPadding(view.getPaddingLeft(), topInset, view.getPaddingRight(), bottomInset);
+            return insets;
+        });
         setContentView(scroll);
         showHomeScreen();
     }
@@ -343,19 +363,24 @@ public class MainActivity extends Activity {
     private void showDualConnectionInfo() {
         new AlertDialog.Builder(this)
                 .setTitle("Dual Connections")
-                .setMessage("LenovoBuds has not verified a dual-device connection command or connection-status API for the GM2 Pro. Pair and manage the earbuds through Android Bluetooth settings.")
-                .setPositiveButton("Got it", null).show();
+                .setMessage("The GM2 Pro's dual-device connection support cannot currently be controlled from LenovoBuds. You can still manage Bluetooth pairings through Android settings.")
+                .setPositiveButton("Open Bluetooth settings", (dialog, which) ->
+                        startActivity(new Intent(Settings.ACTION_BLUETOOTH_SETTINGS)))
+                .setNegativeButton("Close", null).show();
     }
 
     private void buildControlsContent() {
-        TextView intro = text("Choose an earbud to view its touch gestures.", 12, MUTED, false);
+        selectedEarbudSide = prefs.getString("selected_earbud_side", "Left");
+        TextView intro = text("Choose an earbud to plan its touch actions.", 12, MUTED, false);
         LinearLayout.LayoutParams introLp = params(-1, -2);
         introLp.topMargin = dp(8);
         page.addView(intro, introLp);
 
         FrameLayout hero = new FrameLayout(this);
         hero.setBackground(pill(Color.rgb(237, 245, 248), dp(24), Color.TRANSPARENT));
-        hero.addView(new EarbudsIllustrationView(this), new FrameLayout.LayoutParams(-1, dp(160), Gravity.CENTER));
+        controlsIllustration = new EarbudsIllustrationView(this);
+        controlsIllustration.setSelectedSide("Left".equals(selectedEarbudSide));
+        hero.addView(controlsIllustration, new FrameLayout.LayoutParams(-1, dp(160), Gravity.CENTER));
         LinearLayout.LayoutParams heroLp = params(-1, dp(165));
         heroLp.topMargin = dp(14);
         page.addView(hero, heroLp);
@@ -364,9 +389,10 @@ public class MainActivity extends Activity {
         tabs.setPadding(dp(4), dp(4), dp(4), dp(4));
         tabs.setBackground(pill(Color.rgb(231, 237, 239), dp(26), Color.TRANSPARENT));
         Button left = modeButton("Left"), right = modeButton("Right");
-        styleModeButton(left, true); styleModeButton(right, false);
-        left.setOnClickListener(v -> { styleModeButton(left, true); styleModeButton(right, false); });
-        right.setOnClickListener(v -> { styleModeButton(left, false); styleModeButton(right, true); });
+        styleModeButton(left, "Left".equals(selectedEarbudSide));
+        styleModeButton(right, "Right".equals(selectedEarbudSide));
+        left.setOnClickListener(v -> selectEarbudSide("Left", left, right));
+        right.setOnClickListener(v -> selectEarbudSide("Right", left, right));
         tabs.addView(left, new LinearLayout.LayoutParams(0, dp(38), 1f));
         tabs.addView(right, new LinearLayout.LayoutParams(0, dp(38), 1f));
         LinearLayout.LayoutParams tabsLp = params(-1, dp(46));
@@ -374,23 +400,42 @@ public class MainActivity extends Activity {
         page.addView(tabs, tabsLp);
 
         LinearLayout actions = card();
-        addTouchActionRow(actions, "Single Tap");
-        addDivider(actions);
-        addTouchActionRow(actions, "Double Tap");
-        addDivider(actions);
-        addTouchActionRow(actions, "Triple Tap");
-        addDivider(actions);
-        addTouchActionRow(actions, "Tap and Hold");
+        renderTouchActionRows(actions);
         page.addView(actions, cardMargins());
 
-        TextView note = text("Touch mappings are not currently readable or configurable through a verified GM2 Pro app command. These rows are a preview, not working remapping controls.", 10, MUTED, false);
+        TextView note = text("These are saved preferences on this phone, not earbud remappings. The GM2 Pro's app control protocol has not been verified, so LenovoBuds cannot write these choices to the headset yet.", 10, MUTED, false);
         note.setLineSpacing(dp(3), 1f);
         LinearLayout.LayoutParams noteLp = params(-1, -2);
         noteLp.topMargin = dp(13);
         page.addView(note, noteLp);
     }
 
+    private void selectEarbudSide(String side, Button left, Button right) {
+        selectedEarbudSide = side;
+        prefs.edit().putString("selected_earbud_side", side).apply();
+        styleModeButton(left, "Left".equals(side));
+        styleModeButton(right, "Right".equals(side));
+        if (controlsIllustration != null) controlsIllustration.setSelectedSide("Left".equals(side));
+        // Rebuild only the gesture card while preserving the selected-side tab.
+        showControlsScreen();
+    }
+
+    private void renderTouchActionRows(LinearLayout parent) {
+        parent.removeAllViews();
+        String[] gestures = {"Single Tap", "Double Tap", "Triple Tap", "Tap and Hold"};
+        for (int i = 0; i < gestures.length; i++) {
+            if (i > 0) addDivider(parent);
+            addTouchActionRow(parent, gestures[i]);
+        }
+    }
+
+    private String gesturePreferenceKey(String gesture) {
+        return "gesture_" + selectedEarbudSide.toLowerCase(Locale.ROOT) + "_"
+                + gesture.toLowerCase(Locale.ROOT).replace(' ', '_');
+    }
+
     private void addTouchActionRow(LinearLayout parent, String title) {
+        String saved = prefs.getString(gesturePreferenceKey(title), "Not set");
         LinearLayout row = new LinearLayout(this);
         row.setGravity(Gravity.CENTER_VERTICAL);
         TextView dot = text("•", 25, CYAN, true);
@@ -399,7 +444,9 @@ public class MainActivity extends Activity {
         LinearLayout labels = new LinearLayout(this);
         labels.setOrientation(LinearLayout.VERTICAL);
         labels.addView(text(title, 14, TEXT, true));
-        TextView subtitle = text("Not exposed by the app protocol", 10, MUTED, false);
+        TextView subtitle = text(saved.equals("Not set")
+                ? "Tap to set a local preference"
+                : "Preferred: " + saved + " · local only", 10, MUTED, false);
         LinearLayout.LayoutParams slp = params(-1, -2);
         slp.topMargin = dp(3);
         labels.addView(subtitle, slp);
@@ -411,10 +458,33 @@ public class MainActivity extends Activity {
         row.setBackground(new RippleDrawable(ColorStateList.valueOf(0x18000000),
                 pill(Color.WHITE, dp(10), Color.TRANSPARENT),
                 pill(Color.WHITE, dp(10), Color.TRANSPARENT)));
-        row.setOnClickListener(v -> new AlertDialog.Builder(this).setTitle(title)
-                .setMessage("Touch-action remapping is not yet supported for the thinkplus GM2 Pro. Selecting this row will not send a command to the earbuds.")
-                .setPositiveButton("Got it", null).show());
+        row.setOnClickListener(v -> editGesturePreference(title));
         parent.addView(row, params(-1, dp(68)));
+    }
+
+    private void editGesturePreference(String title) {
+        if (prefs.getBoolean("app_control_lock", false)) {
+            new AlertDialog.Builder(this).setTitle("App Control Lock is on")
+                    .setMessage("Turn off App Control Lock in Settings to edit your saved gesture preferences.")
+                    .setPositiveButton("Got it", null).show();
+            return;
+        }
+        String[] options = {
+                "Not set", "Play / pause", "Next track", "Previous track",
+                "Volume up", "Volume down", "Voice assistant", "Game / Music profile"
+        };
+        String current = prefs.getString(gesturePreferenceKey(title), "Not set");
+        int selected = 0;
+        for (int i = 0; i < options.length; i++) if (options[i].equals(current)) selected = i;
+        new AlertDialog.Builder(this)
+                .setTitle(selectedEarbudSide + " · " + title)
+                .setSingleChoiceItems(options, selected, (dialog, which) -> {
+                    prefs.edit().putString(gesturePreferenceKey(title), options[which]).apply();
+                    dialog.dismiss();
+                    showControlsScreen();
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
     }
 
     private void showSettingsSheet() {
@@ -444,25 +514,27 @@ public class MainActivity extends Activity {
         lockRow.setGravity(Gravity.CENTER_VERTICAL);
         LinearLayout labels = new LinearLayout(this);
         labels.setOrientation(LinearLayout.VERTICAL);
-        labels.addView(text("Control Lock", 14, TEXT, true));
-        TextView detail = text("Temporarily disables touch controls and touch sounds on the headset.", 10, MUTED, false);
+        labels.addView(text("App Control Lock", 14, TEXT, true));
+        TextView detail = text("Locks gesture preferences inside LenovoBuds only. It does not disable touch controls on the headset.", 10, MUTED, false);
         detail.setLineSpacing(dp(2), 1f);
         LinearLayout.LayoutParams dlp = params(-1, -2);
         dlp.topMargin = dp(4);
         labels.addView(detail, dlp);
         lockRow.addView(labels, new LinearLayout.LayoutParams(0, -2, 1f));
         Switch lockSwitch = new Switch(this);
-        lockSwitch.setChecked(false);
-        lockSwitch.setEnabled(false);
+        lockSwitch.setChecked(prefs.getBoolean("app_control_lock", false));
+        lockSwitch.setOnCheckedChangeListener((button, checked) ->
+                prefs.edit().putBoolean("app_control_lock", checked).apply());
         lockRow.addView(lockSwitch);
         LinearLayout.LayoutParams rlp = params(-1, -2);
         rlp.topMargin = dp(17);
         sheet.addView(lockRow, rlp);
 
-        TextView unavailable = text("Unavailable for GM2 Pro · no verified control-lock command", 10, MUTED, false);
-        LinearLayout.LayoutParams ulp = params(-1, -2);
-        ulp.topMargin = dp(9);
-        sheet.addView(unavailable, ulp);
+        TextView note = text("This is an in-app setting. The GM2 Pro's hardware Control Lock command is not verified.", 10, MUTED, false);
+        note.setLineSpacing(dp(2), 1f);
+        LinearLayout.LayoutParams noteLp = params(-1, -2);
+        noteLp.topMargin = dp(9);
+        sheet.addView(note, noteLp);
 
         Button done = primaryButton("Done");
         done.setOnClickListener(v -> dialog.dismiss());
@@ -889,12 +961,12 @@ public class MainActivity extends Activity {
             beginScan();
         } catch (SecurityException error) {
             pendingBluetoothScan = false;
-            deviceStatus.setText("Bluetooth access was denied by Android.");
+            if (deviceStatus != null) deviceStatus.setText("Bluetooth access was denied by Android.");
             setFindButtonState("Find paired earbuds", true);
             Toast.makeText(this, "Allow Nearby devices permission for LenovoBuds in Settings.", Toast.LENGTH_LONG).show();
         } catch (Throwable error) {
             pendingBluetoothScan = false;
-            deviceStatus.setText("Discovery failed: " + error.getClass().getSimpleName());
+            if (deviceStatus != null) deviceStatus.setText("Discovery failed: " + error.getClass().getSimpleName());
             setFindButtonState("Find paired earbuds", true);
             Toast.makeText(this, "Could not check paired devices. See the device status above.", Toast.LENGTH_LONG).show();
         }
@@ -910,26 +982,26 @@ public class MainActivity extends Activity {
     private void beginScan() {
         if (!hasBluetoothPermissions()) {
             pendingBluetoothScan = true;
-            deviceStatus.setText("Waiting for Android Nearby devices permission…");
+            if (deviceStatus != null) deviceStatus.setText("Waiting for Android Nearby devices permission…");
             setFindButtonState("Waiting for permission…", false);
             try {
                 requestBluetoothPermissions();
             } catch (Throwable error) {
                 pendingBluetoothScan = false;
-                deviceStatus.setText("Could not request Bluetooth permission.");
+                if (deviceStatus != null) deviceStatus.setText("Could not request Bluetooth permission.");
                 setFindButtonState("Find paired earbuds", true);
                 Toast.makeText(this, "Open LenovoBuds app settings and allow Nearby devices.", Toast.LENGTH_LONG).show();
             }
             return;
         }
         if (bluetoothAdapter == null) {
-            deviceStatus.setText("This phone does not expose a Bluetooth adapter.");
+            if (deviceStatus != null) deviceStatus.setText("This phone does not expose a Bluetooth adapter.");
             setFindButtonState("Find paired earbuds", true);
             Toast.makeText(this, "Bluetooth is unavailable on this phone.", Toast.LENGTH_LONG).show();
             return;
         }
         if (!bluetoothAdapter.isEnabled()) {
-            deviceStatus.setText("Bluetooth is off. Turn it on, then tap Find paired earbuds.");
+            if (deviceStatus != null) deviceStatus.setText("Bluetooth is off. Turn it on, then tap Find paired earbuds.");
             setFindButtonState("Find paired earbuds", true);
             try {
                 startActivity(new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE));
@@ -962,7 +1034,7 @@ public class MainActivity extends Activity {
             return;
         }
 
-        deviceStatus.setText("No paired devices found. Checking for BLE advertisements…");
+        if (deviceStatus != null) deviceStatus.setText("No paired devices found. Checking for BLE advertisements…");
         bleScanner = bluetoothAdapter.getBluetoothLeScanner();
         if (bleScanner == null) {
             showDevicePicker("No paired device was found and BLE scanning is unavailable. Pair your earbuds in Android Bluetooth settings first.");
@@ -997,7 +1069,7 @@ public class MainActivity extends Activity {
                 showDevicePicker("No paired Lenovo device was found. The GM2 Pro may not advertise as a BLE device.");
             }, 8000L);
         } catch (SecurityException error) {
-            deviceStatus.setText("Android denied Bluetooth scanning permission.");
+            if (deviceStatus != null) deviceStatus.setText("Android denied Bluetooth scanning permission.");
             setFindButtonState("Find paired earbuds", true);
             Toast.makeText(this, "Bluetooth permission was not granted.", Toast.LENGTH_LONG).show();
         } catch (Throwable error) {
@@ -1032,7 +1104,7 @@ public class MainActivity extends Activity {
         setFindButtonState("Find paired earbuds", true);
         if (!addPairedDevices()) return;
         if (devices.isEmpty()) {
-            deviceStatus.setText("No paired devices found");
+            if (deviceStatus != null) deviceStatus.setText("No paired devices found");
             new AlertDialog.Builder(this).setTitle("No paired earbuds found")
                     .setMessage(message + "\n\nYour phone already needs to pair the earbuds in Android Bluetooth settings before LenovoBuds can identify them.")
                     .setPositiveButton("Open Bluetooth settings", (d, w) -> startActivity(new Intent(Settings.ACTION_BLUETOOTH_SETTINGS)))
@@ -1174,7 +1246,7 @@ public class MainActivity extends Activity {
             pendingBluetoothScan = false;
             if (hasBluetoothPermissions()) beginScan();
             else {
-                deviceStatus.setText("Bluetooth permission denied. Allow Nearby devices in App info.");
+                if (deviceStatus != null) deviceStatus.setText("Bluetooth permission denied. Allow Nearby devices in App info.");
                 setFindButtonState("Find paired earbuds", true);
                 Toast.makeText(this, "Allow Nearby devices permission for LenovoBuds.", Toast.LENGTH_LONG).show();
             }
@@ -1207,9 +1279,16 @@ public class MainActivity extends Activity {
         private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final RectF shape = new RectF();
 
+        private boolean highlightLeft = true;
+
         EarbudsIllustrationView(Activity activity) {
             super(activity);
             setLayerType(View.LAYER_TYPE_SOFTWARE, null);
+        }
+
+        void setSelectedSide(boolean left) {
+            highlightLeft = left;
+            invalidate();
         }
 
         @Override protected void onDraw(Canvas canvas) {
@@ -1227,6 +1306,11 @@ public class MainActivity extends Activity {
             canvas.save();
             canvas.rotate(left ? -28f : 28f, cx, cy);
             float u = radius / 65f;
+            if (left == highlightLeft) {
+                paint.setStyle(Paint.Style.FILL);
+                paint.setColor(Color.argb(48, 43, 177, 204));
+                canvas.drawCircle(cx + 1f * u, cy + 11f * u, 22f * u, paint);
+            }
             paint.setStyle(Paint.Style.STROKE);
             paint.setStrokeCap(Paint.Cap.ROUND);
             paint.setStrokeWidth(7f * u);
