@@ -161,6 +161,7 @@ public class MainActivity extends Activity {
         musicButton = null; gamingButton = null; ancButton = null;
         ambientButton = null; normalButton = null; gamingModeSwitch = null;
         findDeviceButton = null;
+        controlsIllustration = null;
     }
 
     private void showHomeScreen() {
